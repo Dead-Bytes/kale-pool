@@ -2,9 +2,10 @@
 -- Created: 2025-01-25
 -- Description: Creates complete database schema for Phase 1 implementation
 
-\i '../schema.sql'
+\i '../../Shared/database/schema.sql'
 
--- Insert sample pooler for development/testing
+-- Insert sample pooler for development/testing  
+-- Using a fixed UUID that matches our Pooler service configuration
 INSERT INTO poolers (
     id,
     name,
@@ -14,8 +15,8 @@ INSERT INTO poolers (
     max_farmers,
     is_active
 ) VALUES (
-    uuid_generate_v4(),
-    'Development Pooler',
+    '12345678-1234-5678-9abc-123456789000'::uuid,
+    'KALE Pool Pooler (Mainnet)',
     'GBQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE',
     'dev-api-key-for-testing-only',
     'http://localhost:3001',

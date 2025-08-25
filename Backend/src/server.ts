@@ -8,6 +8,7 @@ import { harvestService } from './services/harvest-service';
 import { stellarWalletManager } from './services/wallet-manager';
 import { farmerQueries, poolerQueries } from './services/database';
 import { BACKEND_CONFIG } from '../../Shared/utils/constants';
+import { registerPoolerRoutes } from './routes/pooler-routes';
 import type {
   FarmerRegistrationRequest,
   FarmerRegistrationResponse,
@@ -443,6 +444,9 @@ const registerRoutes = async (fastify: FastifyInstance): Promise<void> => {
       });
     }
   });
+
+  // Register pooler routes
+  await registerPoolerRoutes(fastify);
 };
 
 // ======================

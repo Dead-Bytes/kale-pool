@@ -415,10 +415,94 @@ export class PoolerQueries {
     return result.rows[0] || null;
   }
 
+  async getPoolerById(poolerId: string): Promise<PoolerRow | null> {
+    const result = await this.db.query(
+      'SELECT * FROM poolers WHERE id = $1 AND is_active = true',
+      [poolerId]
+    );
+    
+    return result.rows[0] || null;
+  }
+
   async updatePoolerLastSeen(poolerId: string): Promise<void> {
     await this.db.query(
       'UPDATE poolers SET last_seen = NOW() WHERE id = $1',
       [poolerId]
+    );
+  }
+}
+
+export class BlockOperationQueries {
+  constructor(private db: DatabaseService) {}
+
+  async createBlockOperation(
+    blockIndex: number,
+    poolerId: string,
+    status: 'active' | 'completed' | 'failed' = 'active'
+  ): Promise<string> {
+    const result = await this.db.query(
+      `INSERT INTO block_operations (block_index, pooler_id, status) 
+       VALUES ($1, $2, $3) 
+       ON CONFLICT (block_index) DO UPDATE SET
+         pooler_id = EXCLUDED.pooler_id,
+         status = EXCLUDED.status
+       RETURNING id`,
+      [blockIndex, poolerId, status]
+    );
+    
+    return result.rows[0].id;
+  }
+
+  async getBlockOperation(blockIndex: number): Promise<any | null> {
+    const result = await this.db.query(
+      'SELECT * FROM block_operations WHERE block_index = $1',
+      [blockIndex]
+    );
+    
+    return result.rows[0] || null;
+  }
+
+  async updateBlockOperationPlantStarted(blockIndex: number): Promise<void> {
+    await this.db.query(
+      'UPDATE block_operations SET plant_requested_at = NOW() WHERE block_index = $1',
+      [blockIndex]
+    );
+  }
+
+  async updateBlockOperationStats(
+    blockIndex: number,
+    updates: {
+      total_farmers?: number,
+      successful_plants?: number,
+      successful_works?: number,
+      successful_harvests?: number,
+      total_staked?: string,
+      total_rewards?: string,
+      plant_completed_at?: Date,
+      work_completed_at?: Date,
+      harvest_completed_at?: Date,
+      status?: 'active' | 'completed' | 'failed'
+    }
+  ): Promise<void> {
+    const setClause = [];
+    const values = [];
+    let paramIndex = 1;
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setClause.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    });
+
+    if (setClause.length === 0) return;
+
+    values.push(blockIndex);
+    
+    await this.db.query(
+      `UPDATE block_operations SET ${setClause.join(', ')} WHERE block_index = $${paramIndex}`,
+      values
     );
   }
 }
@@ -532,6 +616,7 @@ export class HarvestQueries {
 const db = new DatabaseService();
 export const farmerQueries = new FarmerQueries(db);
 export const poolerQueries = new PoolerQueries(db);
+export const blockOperationQueries = new BlockOperationQueries(db);
 export const plantQueries = new PlantQueries(db);
 export const workQueries = new WorkQueries(db);
 export const harvestQueries = new HarvestQueries(db);
