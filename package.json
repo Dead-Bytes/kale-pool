@@ -1,0 +1,47 @@
+{
+  "name": "kale-pool-mining",
+  "version": "1.0.0",
+  "description": "KALE Pool Mining System - Complete mining pool infrastructure",
+  "main": "start.ts",
+  "scripts": {
+    "start": "bun run start.ts",
+    "dev": "bun run start.ts",
+    "backend": "cd Backend && bun run dev",
+    "pooler": "cd Pooler && bun run dev",
+    "db:setup": "cd Backend && bun run db:migrate",
+    "build": "cd Backend && bun run build",
+    "test": "cd Backend && bun test",
+    "lint": "cd Backend && bun run lint"
+  },
+  "keywords": [
+    "kale",
+    "mining",
+    "pool",
+    "stellar",
+    "blockchain",
+    "cryptocurrency"
+  ],
+  "author": "KALE Pool Mining Team",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.0.0",
+    "node": ">=18.0.0"
+  },
+  "workspaces": [
+    "Backend",
+    "Pooler", 
+    "Shared"
+  ],
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "bun-types": "latest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/kale-pool-mining.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/kale-pool-mining/issues"
+  },
+  "homepage": "https://github.com/your-org/kale-pool-mining#readme"
+}
