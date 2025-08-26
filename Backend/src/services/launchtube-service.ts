@@ -75,13 +75,13 @@ export class LaunchtubeService {
   }
 
   /**
-   * Submit transaction via Launchtube (following reference pattern)
+   * Submit transaction via Launchtube (exactly following reference utils.ts send function)
    */
   private async submitTransaction(txn: any, fee?: number): Promise<LaunchtubeResponse> {
     try {
       const data = new FormData();
       
-      // Handle AssembledTransaction like in reference send function
+      // Exact same logic as reference send function
       let txnXdr: string;
       if (txn.built) {
         txnXdr = txn.built.toXDR();
@@ -97,7 +97,7 @@ export class LaunchtubeService {
         data.set('fee', fee.toString());
       }
 
-      // Submit to Launchtube
+      // Submit to Launchtube with exact same headers as reference
       const response = await fetch(this.launchtubeUrl, {
         method: 'POST',
         headers: {
@@ -108,6 +108,7 @@ export class LaunchtubeService {
         body: data
       });
 
+      // Follow reference error handling pattern
       if (response.ok) {
         const result = await response.json();
         logger.debug('Transaction submitted successfully', { result });
@@ -121,10 +122,18 @@ export class LaunchtubeService {
         const errorText = await response.text();
         logger.error('Transaction submission failed', undefined, { error: errorText, status: response.status });
         
+        // Parse the error to check for specific contract errors
+        let parsedError;
+        try {
+          parsedError = JSON.parse(errorText);
+        } catch (e) {
+          parsedError = { error: errorText };
+        }
+        
         return {
           success: false,
           error: errorText,
-          details: { status: response.status }
+          details: parsedError
         };
       }
     } catch (error) {
@@ -155,11 +164,11 @@ export class LaunchtubeService {
         amount: stakeAmount,
       });
 
-      // Check for simulation errors
+      // Check for simulation errors (following enhanced-farmer.ts pattern)
       if (Api.isSimulationError(transaction.simulation!)) {
-        const errorMessage = transaction.simulation.error;
+        const errorMsg = transaction.simulation.error;
         
-        if (errorMessage.includes('Error(Contract, #8)')) {
+        if (errorMsg.includes("Error(Contract, #8)")) {
           logger.info('Already planted for this block', { farmer: farmerPublicKey });
           return {
             success: true,
@@ -167,16 +176,16 @@ export class LaunchtubeService {
             details: { message: 'Already planted for this block' }
           };
         } else {
-          logger.error('Plant simulation error', undefined, { error: errorMessage });
+          logger.error('Plant simulation error', undefined, { error: errorMsg });
           return {
             success: false,
-            error: `Simulation failed: ${errorMessage}`,
-            details: { simulation_error: errorMessage }
+            error: `Simulation failed: ${errorMsg}`,
+            details: { simulation_error: errorMsg }
           };
         }
       }
 
-      // Sign auth entries
+      // Sign auth entries (following enhanced-farmer.ts pattern)
       const farmerSigner = basicNodeSigner(
         Keypair.fromSecret(farmerSecretKey), 
         this.networkPassphrase
@@ -187,7 +196,7 @@ export class LaunchtubeService {
         signAuthEntry: farmerSigner.signAuthEntry,
       });
 
-      // Submit via Launchtube
+      // Submit via Launchtube (following reference send function)
       const result = await this.submitTransaction(transaction);
       
       if (result.success) {
