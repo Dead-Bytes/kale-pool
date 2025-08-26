@@ -3,6 +3,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import Config from '../config';
 
 // Define log directories
 const logsDir = path.join(process.cwd(), 'logs');
@@ -251,7 +252,7 @@ class KaleLogger {
   }
 
   debug(message: string, context?: any): void {
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (Config.LOG_LEVEL === 'debug') {
       const entry = this.createLogEntry('debug', message, context);
       console.debug(this.formatConsoleMessage(entry));
       this.writeToFile(entry);

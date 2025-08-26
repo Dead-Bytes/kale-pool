@@ -8,6 +8,7 @@
  */
 
 import { execSync } from 'child_process';
+import Config from './Shared/config';
 import { existsSync } from 'fs';
 import path from 'path';
 
@@ -168,7 +169,7 @@ class KalePoolStarter {
     console.log('🗄️  Setting up database...');
     
     try {
-      const dbUrl = process.env.DATABASE_URL || 'postgresql://kale_user:kale_pass@localhost:5432/kale_pool_mainnet';
+      const dbUrl = Config.DATABASE.URL;
       console.log(`   📊 Database URL: ${dbUrl.replace(/:[^@]*@/, ':****@')}`);
       
       // Check if database exists and is accessible

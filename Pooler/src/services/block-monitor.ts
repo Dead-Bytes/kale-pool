@@ -6,6 +6,7 @@ import { Server, Durability } from '@stellar/stellar-sdk/rpc';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { blockMonitorLogger as logger } from '../../../Shared/utils/logger';
+import Config from '../../../Shared/config';
 import type { 
   ContractData, 
   KaleBlock, 
@@ -29,7 +30,7 @@ class BlockMonitor {
 
   constructor() {
     // Initialize Stellar RPC connection
-    this.rpc = new Server(process.env.RPC_URL!);
+    this.rpc = new Server(Config.STELLAR.RPC_URL);
     
     // Initialize pooler state
     this.state = {
@@ -41,22 +42,22 @@ class BlockMonitor {
       startTime: new Date(),
       lastNotificationSent: null,
       errorCount: 0,
-      maxErrorCount: Number(process.env.MAX_ERROR_COUNT) || 10
+      maxErrorCount: Config.BLOCK_MONITOR.MAX_ERROR_COUNT
     };
 
     // Initialize configuration
     this.config = {
-      pollIntervalMs: Number(process.env.BLOCK_POLL_INTERVAL_MS) || 5000,
-      initialDelayMs: Number(process.env.INITIAL_BLOCK_CHECK_DELAY_MS) || 10000,
-      maxMissedBlocks: Number(process.env.MAX_MISSED_BLOCKS) || 5,
-      retryAttempts: Number(process.env.RETRY_ATTEMPTS) || 3,
-      backendApiUrl: process.env.BACKEND_API_URL || 'http://localhost:3000',
-      backendTimeout: Number(process.env.BACKEND_TIMEOUT) || 30000
+      pollIntervalMs: Config.BLOCK_MONITOR.POLL_INTERVAL_MS,
+      initialDelayMs: Config.BLOCK_MONITOR.INITIAL_DELAY_MS,
+      maxMissedBlocks: Config.BLOCK_MONITOR.MAX_MISSED_BLOCKS,
+      retryAttempts: Config.BLOCK_MONITOR.RETRY_ATTEMPTS,
+      backendApiUrl: Config.BACKEND_API.URL,
+      backendTimeout: Config.BACKEND_API.TIMEOUT_MS
     };
 
     this.log('BlockMonitor initialized', {
-      rpc_url: process.env.RPC_URL,
-      contract_id: process.env.CONTRACT_ID,
+      rpc_url: Config.STELLAR.RPC_URL,
+      contract_id: Config.STELLAR.CONTRACT_ID,
       poll_interval: this.config.pollIntervalMs,
       backend_url: this.config.backendApiUrl
     });
@@ -72,8 +73,8 @@ class BlockMonitor {
     }
 
     this.log('🔍 Starting KALE block monitoring...', { 
-      network: process.env.STELLAR_NETWORK,
-      contract: process.env.CONTRACT_ID
+      network: Config.STELLAR.NETWORK,
+      contract: Config.STELLAR.CONTRACT_ID
     });
 
     try {
@@ -220,7 +221,7 @@ class BlockMonitor {
     try {
       const notification: BackendNotification = {
         event: 'new_block_discovered',
-        poolerId: process.env.POOLER_ID || 'kale-pool-pooler',
+        poolerId: Config.POOLER.ID,
         blockIndex: blockEvent.newIndex,
         blockData: {
           index: blockEvent.newIndex,
@@ -280,7 +281,7 @@ class BlockMonitor {
    * Get current contract data (index, block, pail)
    */
   private async getContractData(): Promise<ContractData> {
-    const contractId = process.env.CONTRACT_ID!;
+    const contractId = Config.STELLAR.CONTRACT_ID;
     let index = 0;
     let block: KaleBlock | undefined;
     let pail: KalePail | undefined;

@@ -1,6 +1,8 @@
 // Database service for KALE Pool Mining Backend
 // Phase 1: PostgreSQL connection and query utilities
 
+import Config from '../../../Shared/config';
+
 // Simple logger implementation
 class DatabaseLogger {
   constructor(private component: string) {}
@@ -18,7 +20,7 @@ class DatabaseLogger {
   }
 
   debug(message: string, context?: any): void {
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (Config.LOG_LEVEL === 'debug') {
       console.debug(`[${new Date().toISOString()}] DEBUG [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
     }
   }
@@ -121,7 +123,7 @@ export class DatabaseService {
       max: poolSize,
       idleTimeoutMillis: timeoutMs,
       connectionTimeoutMillis: timeoutMs,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: Config.DATABASE.SSL ? { rejectUnauthorized: false } : false
     });
 
     // Handle pool errors

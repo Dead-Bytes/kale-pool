@@ -1,8 +1,9 @@
 // Database service for KALE Pool Mining Backend
 // Phase 1: PostgreSQL connection and query utilities
 
-// Import centralized logger
+// Import centralized logger and config
 import { databaseLogger as logger } from '../../../Shared/utils/logger';
+import Config from '../../../Shared/config';
 
 // Use dynamic import for pg to avoid build issues
 let pgModule: any = null;
@@ -40,28 +41,6 @@ const retryWithBackoff = async <T>(
   throw lastError!;
 };
 
-const getRequiredEnvVar = (name: string): string => {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Required environment variable ${name} is not set`);
-  }
-  return value;
-};
-
-const getEnvVarAsNumber = (name: string, defaultValue: number): number => {
-  const value = process.env[name];
-  if (!value) {
-    return defaultValue;
-  }
-  
-  const parsed = parseInt(value, 10);
-  if (isNaN(parsed)) {
-    throw new Error(`Environment variable ${name} must be a number, got: ${value}`);
-  }
-  
-  return parsed;
-};
-
 // Simple error creation
 class PoolMiningError extends Error {
   public readonly code: string;
@@ -90,16 +69,17 @@ export class DatabaseService {
   async initialize(): Promise<void> {
     const pg = await getPgModule();
     
-    const connectionString = getRequiredEnvVar('DATABASE_URL');
-    const poolSize = getEnvVarAsNumber('DB_POOL_SIZE', 20);
-    const timeoutMs = getEnvVarAsNumber('DB_TIMEOUT', 30000);
+    // Get connection parameters from config
+    const connectionString = Config.DATABASE.URL;
+    const poolSize = Config.DATABASE.POOL_SIZE;
+    const timeoutMs = Config.DATABASE.TIMEOUT_MS;
 
     this.pool = new pg.Pool({
       connectionString,
       max: poolSize,
       idleTimeoutMillis: timeoutMs,
       connectionTimeoutMillis: timeoutMs,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: Config.DATABASE.SSL ? { rejectUnauthorized: false } : false
     });
 
     // Handle pool errors
@@ -462,8 +442,8 @@ export class BlockOperationQueries {
       status?: 'active' | 'completed' | 'failed'
     }
   ): Promise<void> {
-    const setClause = [];
-    const values = [];
+    const setClause: string[] = [];
+    const values: any[] = [];
     let paramIndex = 1;
 
     Object.entries(updates).forEach(([key, value]) => {

@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import BlockMonitor from './services/block-monitor';
+import Config from '../../Shared/config';
 
 // Load environment configuration
 dotenv.config({ path: '.env.mainnet' });
@@ -20,8 +21,8 @@ class PoolerService {
     
     // Initialize Fastify
     this.app = fastify({
-      logger: process.env.NODE_ENV === 'development' ? {
-        level: process.env.LOG_LEVEL || 'info'
+      logger: Config.NODE_ENV === 'development' ? {
+        level: Config.LOG_LEVEL
       } : {
         level: 'info'
       }
@@ -34,9 +35,9 @@ class PoolerService {
     this.setupShutdownHandlers();
     
     this.log('PoolerService initialized', {
-      pooler_id: process.env.POOLER_ID,
-      backend_url: process.env.BACKEND_API_URL,
-      contract_id: process.env.CONTRACT_ID
+      pooler_id: Config.POOLER.ID,
+      backend_url: Config.BACKEND_API.URL,
+      contract_id: Config.STELLAR.CONTRACT_ID
     });
   }
 
@@ -66,10 +67,10 @@ class PoolerService {
           backend_api: status.backendConnection
         },
         configuration: {
-          network: process.env.STELLAR_NETWORK,
-          contract_id: process.env.CONTRACT_ID,
-          poll_interval_ms: process.env.BLOCK_POLL_INTERVAL_MS,
-          backend_url: process.env.BACKEND_API_URL
+          network: Config.STELLAR.NETWORK,
+          contract_id: Config.STELLAR.CONTRACT_ID,
+          poll_interval_ms: Config.BLOCK_MONITOR.POLL_INTERVAL_MS,
+          backend_url: Config.BACKEND_API.URL
         }
       };
 
@@ -83,7 +84,7 @@ class PoolerService {
       reply.send({
         service: 'KALE Pool Mining Pooler',
         version: '1.0.0',
-        pooler_id: process.env.POOLER_ID,
+        pooler_id: Config.POOLER.ID,
         started_at: this.startTime.toISOString(),
         uptime_seconds: Math.floor((Date.now() - this.startTime.getTime()) / 1000),
         monitoring_status: {
@@ -94,22 +95,58 @@ class PoolerService {
           error_count: status.errorCount
         },
         network_config: {
-          stellar_network: process.env.STELLAR_NETWORK,
-          rpc_url: process.env.RPC_URL,
-          contract_id: process.env.CONTRACT_ID,
-          network_passphrase: process.env.NETWORK_PASSPHRASE
+          stellar_network: Config.STELLAR.NETWORK,
+          rpc_url: Config.STELLAR.RPC_URL,
+          contract_id: Config.STELLAR.CONTRACT_ID,
+          network_passphrase: Config.STELLAR.NETWORK_PASSPHRASE
         },
         backend_integration: {
-          backend_url: process.env.BACKEND_API_URL,
-          timeout_ms: process.env.BACKEND_TIMEOUT,
-          retry_attempts: process.env.RETRY_ATTEMPTS
+          backend_url: Config.BACKEND_API.URL,
+          timeout_ms: Config.BACKEND_API.TIMEOUT_MS,
+          retry_attempts: Config.BLOCK_MONITOR.RETRY_ATTEMPTS
         }
       });
     });
 
+    // Backend planting status notification endpoint
+    this.app.post('/backend/planting-status', async (request, reply) => {
+      try {
+        const { block_index, pooler_id, successful_plants, failed_plants, farmers_planted, duration_ms } = request.body as any;
+        
+        this.log(`🌱 Received planting status notification`, {
+          block_index,
+          pooler_id,
+          successful_plants,
+          failed_plants,
+          farmers_planted,
+          duration_ms
+        });
+
+        // Log planting results
+        if (successful_plants > 0) {
+          this.log(`✅ Block ${block_index}: ${successful_plants} successful plants`);
+        }
+        if (failed_plants > 0) {
+          this.log(`❌ Block ${block_index}: ${failed_plants} failed plants`);
+        }
+
+        reply.send({
+          success: true,
+          message: 'Planting status received',
+          acknowledged_at: new Date().toISOString()
+        });
+      } catch (error) {
+        this.logError('Failed to process planting status', error);
+        reply.status(500).send({
+          success: false,
+          error: 'Failed to process planting status'
+        });
+      }
+    });
+
     // Manual block check trigger (debug endpoint)
     this.app.post('/debug/trigger-check', async (request, reply) => {
-      if (process.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
+      if (!Config.DEBUG.ENDPOINTS_ENABLED) {
         return reply.status(404).send({ error: 'Debug endpoints disabled' });
       }
 
@@ -133,9 +170,9 @@ class PoolerService {
     });
 
     // CORS setup
-    if (process.env.CORS_ORIGIN) {
+    if (Config.BACKEND.CORS_ORIGIN.length > 0) {
       this.app.register(require('@fastify/cors'), {
-        origin: process.env.CORS_ORIGIN.split(','),
+        origin: Config.BACKEND.CORS_ORIGIN,
         methods: ['GET', 'POST']
       });
     }
@@ -176,8 +213,8 @@ class PoolerService {
       this.displayStartupBanner();
       
       // Start HTTP server
-      const port = Number(process.env.PORT) || 3001;
-      const host = process.env.HOST || 'localhost';
+      const port = Config.POOLER.PORT;
+      const host = Config.POOLER.HOST;
       
       await this.app.listen({ port, host });
       this.log(`🚀 Pooler HTTP server started`, { host, port });
@@ -223,10 +260,10 @@ class PoolerService {
     console.log(chalk.yellow('📡 Block Discovery & Backend Coordination'));
     console.log('');
     console.log(chalk.blue(`⚙️  Configuration:`));
-    console.log(`   • Network: ${process.env.STELLAR_NETWORK}`);
-    console.log(`   • Contract: ${process.env.CONTRACT_ID}`);
-    console.log(`   • Backend: ${process.env.BACKEND_API_URL}`);
-    console.log(`   • Poll Interval: ${process.env.BLOCK_POLL_INTERVAL_MS}ms`);
+    console.log(`   • Network: ${Config.STELLAR.NETWORK}`);
+    console.log(`   • Contract: ${Config.STELLAR.CONTRACT_ID}`);
+    console.log(`   • Backend: ${Config.BACKEND_API.URL}`);
+    console.log(`   • Poll Interval: ${Config.BLOCK_MONITOR.POLL_INTERVAL_MS}ms`);
     console.log('');
   }
 

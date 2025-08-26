@@ -8,7 +8,7 @@ import { workService } from './services/work-service';
 import { harvestService } from './services/harvest-service';
 import { stellarWalletManager } from './services/wallet-manager';
 import { initializeDatabase } from './services/database';
-import { BACKEND_CONFIG } from '../../Shared/utils/constants';
+import Config from '../../Shared/config';
 
 // Import Phase 2 routes
 import { 
@@ -32,7 +32,10 @@ export const createServer = (): express.Application => {
   const app = express();
 
   // Middleware
-  app.use(cors());
+  app.use(cors({
+    origin: Config.BACKEND.CORS_ORIGIN,
+    credentials: true
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -77,7 +80,7 @@ export const createServer = (): express.Application => {
 
     const errorResponse = {
       error: 'Internal Server Error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred',
+      message: Config.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred',
       timestamp: new Date().toISOString()
     };
 
@@ -581,14 +584,14 @@ export const startServer = async (): Promise<void> => {
     
     const app = createServer();
     
-    const port = parseInt(process.env.PORT || '3000');
-    const host = process.env.HOST || '0.0.0.0';
+    const port = Config.BACKEND.PORT;
+    const host = Config.BACKEND.HOST;
     
     app.listen(port, host, () => {
       logger.info('Backend API server started', {
         port,
         host,
-        environment: process.env.NODE_ENV || 'development',
+        environment: Config.NODE_ENV,
         phase: 2,
         features: 'Farmer Onboarding + Pool Contracts'
       });
@@ -649,6 +652,29 @@ async function executePlantOperations(activeFarmers: any[], blockIndex: number):
   // Execute all plants in parallel
   const results = await Promise.all(plantPromises);
   
+  // Record each plant operation in database
+  const { plantingQueries } = await import('./services/database-phase2');
+  
+  for (const result of results) {
+    try {
+      await plantingQueries.recordPlantOperation({
+        block_index: blockIndex,
+        farmer_id: result.farmerId,
+        pooler_id: '12345678-1234-5678-9abc-123456789000', // Current pooler ID
+        custodial_wallet: activeFarmers.find(f => f.id === result.farmerId)?.custodial_public_key || '',
+        stake_amount: (result.stakeAmount || 0).toString(),
+        transaction_hash: result.success ? result.transactionHash : undefined,
+        status: result.success ? 'success' : 'failed',
+        error_message: result.success ? undefined : result.error
+      });
+    } catch (dbError) {
+      logger.error('Failed to record plant operation in database', dbError as Error, {
+        farmer_id: result.farmerId,
+        block_index: blockIndex
+      });
+    }
+  }
+  
   const successCount = results.filter(r => r.success).length;
   const failCount = results.length - successCount;
 
@@ -681,7 +707,7 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
 
     const notification = {
       event: 'planting_completed',
-      backendId: process.env.BACKEND_ID || 'kale-pool-backend',
+      backendId: Config.BACKEND.ID,
       blockIndex: plantingData.blockIndex,
       plantingStatus: plantingData.plantingStatus,
       results: {
@@ -707,7 +733,7 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Backend-ID': process.env.BACKEND_ID || 'kale-pool-backend',
+        'X-Backend-ID': Config.BACKEND.ID,
         'Authorization': `Bearer ${pooler.api_key || 'dev-key'}`
       },
       body: JSON.stringify(notification)

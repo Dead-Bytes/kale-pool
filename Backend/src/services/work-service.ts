@@ -5,6 +5,7 @@ import { stellarWalletManager } from './wallet-manager';
 import { farmerQueries, workQueries, poolerQueries } from './database';
 import { isValidNonce } from '../../../Shared/utils/helpers';
 import type { FarmerRow } from './database';
+import Config from '../../../Shared/config';
 
 // Logger implementation
 class WorkLogger {
@@ -23,7 +24,7 @@ class WorkLogger {
   }
 
   debug(message: string, context?: any): void {
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (Config.LOG_LEVEL === 'debug') {
       console.debug(`[${new Date().toISOString()}] DEBUG [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
     }
   }

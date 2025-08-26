@@ -7,7 +7,7 @@ import { workService } from './services/work-service';
 import { harvestService } from './services/harvest-service';
 import { stellarWalletManager } from './services/wallet-manager';
 import { farmerQueries, poolerQueries } from './services/database';
-import { BACKEND_CONFIG } from '../../Shared/utils/constants';
+import Config from '../../Shared/config';
 import { registerPoolerRoutes } from './routes/pooler-routes';
 import type {
   FarmerRegistrationRequest,
@@ -39,7 +39,7 @@ class APILogger {
   }
 
   debug(message: string, context?: any): void {
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (Config.LOG_LEVEL === 'debug') {
       console.debug(`[${new Date().toISOString()}] DEBUG [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
     }
   }
@@ -53,7 +53,7 @@ const logger = new APILogger('BackendAPI');
 
 export const createServer = async (): Promise<FastifyInstance> => {
   const fastifyApp = fastify({
-    logger: process.env.NODE_ENV === 'development' ? {
+    logger: Config.NODE_ENV === 'development' ? {
       level: 'debug',
       transport: {
         target: 'pino-pretty',
@@ -96,7 +96,7 @@ export const createServer = async (): Promise<FastifyInstance> => {
 
     const errorResponse: ErrorResponse = {
       error: 'Internal Server Error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred',
+      message: Config.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred',
       timestamp: new Date().toISOString()
     };
 
@@ -457,15 +457,15 @@ export const startServer = async (): Promise<void> => {
   try {
     const server = await createServer();
     
-    const port = parseInt(process.env.PORT || '3000');
-    const host = process.env.HOST || '0.0.0.0';
+    const port = Config.BACKEND.PORT;
+    const host = Config.BACKEND.HOST;
     
     await server.listen({ port, host });
     
     logger.info('Backend API server started', {
       port,
       host,
-      environment: process.env.NODE_ENV || 'development'
+      environment: Config.NODE_ENV
     });
 
   } catch (error) {

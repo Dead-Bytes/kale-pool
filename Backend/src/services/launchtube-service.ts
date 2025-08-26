@@ -6,17 +6,9 @@ import { basicNodeSigner } from '@stellar/stellar-sdk/minimal/contract';
 import { Api } from '@stellar/stellar-sdk/minimal/rpc';
 import { Client } from 'kale-sc-sdk';
 
-// Import centralized logger
+// Import centralized logger and config
 import { launchtubeLogger as logger } from '../../../Shared/utils/logger';
-
-// Configuration helpers
-const getRequiredEnvVar = (name: string): string => {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Required environment variable ${name} is not set`);
-  }
-  return value;
-};
+import Config from '../../../Shared/config';
 
 export interface LaunchtubeResponse {
   success: boolean;
@@ -53,11 +45,11 @@ export class LaunchtubeService {
   private contract: Client;
 
   constructor() {
-    this.launchtubeUrl = process.env.LAUNCHTUBE_URL || 'https://launchtube.xyz';
-    this.launchtubeJwt = process.env.LAUNCHTUBE_JWT || '';
-    this.rpcUrl = process.env.RPC_URL || 'https://mainnet.sorobanrpc.com';
-    this.contractId = process.env.CONTRACT_ID || 'CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA';
-    this.networkPassphrase = process.env.NETWORK_PASSPHRASE || 'Public Global Stellar Network ; September 2015';
+    this.launchtubeUrl = Config.LAUNCHTUBE.URL;
+    this.launchtubeJwt = Config.LAUNCHTUBE.JWT;
+    this.rpcUrl = Config.STELLAR.RPC_URL;
+    this.contractId = Config.STELLAR.CONTRACT_ID;
+    this.networkPassphrase = Config.STELLAR.NETWORK_PASSPHRASE;
 
     // Initialize KALE contract client (like in reference files)
     this.contract = new Client({
@@ -70,7 +62,7 @@ export class LaunchtubeService {
       launchtube_url: this.launchtubeUrl,
       rpc_url: this.rpcUrl,
       contract_id: this.contractId,
-      network: this.networkPassphrase
+      network: Config.STELLAR.NETWORK
     });
   }
 

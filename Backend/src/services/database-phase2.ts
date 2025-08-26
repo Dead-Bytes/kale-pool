@@ -2,6 +2,7 @@
 // User registration, pool contracts, and balance monitoring queries
 
 import { db, DatabaseService } from './database';
+import { databaseLogger as logger } from '../../../Shared/utils/logger';
 
 // Type definitions for Phase 2
 export interface UserRow {
@@ -523,6 +524,78 @@ class BlockOperationsQueries {
   }
 }
 
+// Plant operations tracking
+class PlantingQueries {
+  constructor(private db: any) {}
+
+  async recordPlantOperation(plantData: {
+    block_index: number;
+    farmer_id: string;
+    pooler_id: string;
+    custodial_wallet: string;
+    stake_amount: string;
+    transaction_hash?: string;
+    status: 'success' | 'failed';
+    error_message?: string;
+  }): Promise<string> {
+    const result = await this.db.query(`
+      INSERT INTO plantings (
+        block_index, farmer_id, pooler_id, custodial_wallet, 
+        stake_amount, transaction_hash, status, error_message
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id
+    `, [
+      plantData.block_index,
+      plantData.farmer_id,
+      plantData.pooler_id,
+      plantData.custodial_wallet,
+      BigInt(plantData.stake_amount),
+      plantData.transaction_hash,
+      plantData.status,
+      plantData.error_message
+    ]);
+    
+    logger.info('Plant operation recorded in database', {
+      plant_id: result.rows[0].id,
+      block_index: plantData.block_index,
+      farmer_id: plantData.farmer_id,
+      status: plantData.status,
+      transaction_hash: plantData.transaction_hash
+    });
+    
+    return result.rows[0].id;
+  }
+
+  async getPlantingsByBlock(block_index: number): Promise<any[]> {
+    const result = await this.db.query(`
+      SELECT p.*, f.custodial_public_key, u.email as farmer_email
+      FROM plantings p
+      JOIN farmers f ON p.farmer_id = f.id
+      JOIN users u ON f.user_id = u.id
+      WHERE p.block_index = $1
+      ORDER BY p.planted_at DESC
+    `, [block_index]);
+    
+    return result.rows;
+  }
+
+  async getPlantingStats(limit: number = 100): Promise<any> {
+    const result = await this.db.query(`
+      SELECT 
+        COUNT(*) as total_plantings,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_plantings,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_plantings,
+        SUM(stake_amount) as total_staked,
+        COUNT(DISTINCT farmer_id) as unique_farmers,
+        COUNT(DISTINCT block_index) as blocks_planted
+      FROM plantings
+      WHERE planted_at >= NOW() - INTERVAL '24 hours'
+    `);
+    
+    return result.rows[0];
+  }
+}
+
 // Add missing method to PoolContractQueries
 class PoolContractQueriesExtended extends PoolContractQueries {
   async getActiveFarmersForPlanting(): Promise<any[]> {
@@ -550,3 +623,4 @@ export const balanceCheckQueries = new BalanceCheckQueries(db);
 export const poolStatisticsQueries = new PoolStatisticsQueries(db);
 export const poolerQueriesPhase2 = new PoolerQueriesPhase2(db);
 export const blockOperationsQueries = new BlockOperationsQueries(db);
+export const plantingQueries = new PlantingQueries(db);
