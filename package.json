@@ -29,12 +29,11 @@
   },
   "workspaces": [
     "Backend",
-    "Pooler", 
-    "Shared"
+    "Pooler"
   ],
   "devDependencies": {
-    "typescript": "^5.2.2",
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "typescript": "^5.2.2"
   },
   "repository": {
     "type": "git",
@@ -43,5 +42,8 @@
   "bugs": {
     "url": "https://github.com/your-org/kale-pool-mining/issues"
   },
-  "homepage": "https://github.com/your-org/kale-pool-mining#readme"
+  "homepage": "https://github.com/your-org/kale-pool-mining#readme",
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  }
 }

@@ -112,15 +112,30 @@ export class LaunchtubeService {
         };
       } else {
         const errorText = await response.text();
-        logger.error('Transaction submission failed', undefined, { error: errorText, status: response.status });
         
-        // Parse the error to check for specific contract errors
+        // Parse the error to check for specific issues
         let parsedError;
         try {
           parsedError = JSON.parse(errorText);
         } catch (e) {
           parsedError = { error: errorText };
         }
+        
+        // Check for unfunded account error
+        if (parsedError.status === 'NOT_FOUND') {
+          logger.warn('Transaction failed - account not found (likely unfunded)', {
+            error: 'Account does not exist on Stellar network',
+            suggestion: 'Fund the custodial wallet with XLM before attempting transactions'
+          });
+          
+          return {
+            success: false,
+            error: 'Account not found - wallet needs funding with XLM on mainnet',
+            details: { ...parsedError, error_type: 'UNFUNDED_ACCOUNT' }
+          };
+        }
+        
+        logger.error('Transaction submission failed', undefined, { error: errorText, status: response.status });
         
         return {
           success: false,

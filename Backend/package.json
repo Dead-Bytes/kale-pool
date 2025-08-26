@@ -20,7 +20,7 @@
     "@types/express": "^4.17.21",
     "chalk": "^5.6.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "dotenv": "^17.2.1",
     "express": "^4.18.2",
     "fastify": "^4.24.3",
     "kale-sc-sdk": "file:../ext/kale-sc-sdk",

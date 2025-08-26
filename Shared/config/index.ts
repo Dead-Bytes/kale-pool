@@ -2,15 +2,40 @@
 // Based on reference implementation patterns
 
 import { config } from 'dotenv';
+import { existsSync } from 'fs';
+import { join } from 'path';
+
+// Load environment variables from appropriate .env file
+// Try multiple paths to find the correct .env file
+const envPaths = [
+  join(process.cwd(), 'Backend', '.env.mainnet'),
+  join(process.cwd(), 'Backend', '.env'), 
+  join(process.cwd(), '.env.mainnet'),
+  join(process.cwd(), '.env'),
+  // Also try relative to this config file's location
+  join(__dirname, '..', '..', 'Backend', '.env.mainnet'),
+  join(__dirname, '..', '..', 'Backend', '.env')
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    console.log(`[Config] Loading environment from: ${envPath}`);
+    config({ path: envPath });
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.log('[Config] No .env file found, using system environment variables');
+}
 
 // Declare process global (available in Node.js runtime)
 declare const process: { 
   env: Record<string, string | undefined>;
   exit: (code?: number) => never;
 };
-
-// Load environment variables
-config();
 
 interface KalePoolConfig {
   // Core application settings
@@ -85,10 +110,6 @@ class ConfigurationError extends Error {
 function validateEnvironmentVariable(name: string, value: string | undefined, required: boolean = true): string {
   if (!value && required) {
     throw new ConfigurationError(`Required environment variable ${name} is not set`);
-  }
-  
-  if (!value && !required) {
-    return '';
   }
   
   if (value && value.trim() === '') {
@@ -169,7 +190,7 @@ function loadConfig(): KalePoolConfig {
       STELLAR: {
         NETWORK: validateEnvironmentVariable('STELLAR_NETWORK', process.env.STELLAR_NETWORK, false) || 'mainnet',
         RPC_URL: validateEnvironmentVariable('RPC_URL', process.env.RPC_URL, false) || 'https://mainnet.sorobanrpc.com',
-        CONTRACT_ID: validateEnvironmentVariable('CONTRACT_ID', process.env.CONTRACT_ID) || 'CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA',
+        CONTRACT_ID: validateEnvironmentVariable('CONTRACT_ID', process.env.CONTRACT_ID),
         NETWORK_PASSPHRASE: validateEnvironmentVariable('NETWORK_PASSPHRASE', process.env.NETWORK_PASSPHRASE, false) || 'Public Global Stellar Network ; September 2015',
       },
       

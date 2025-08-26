@@ -2,7 +2,7 @@
 // Phase 1: Coordinated plant operations for multiple farmers
 
 import { stellarWalletManager } from './wallet-manager';
-import { farmerQueries, plantQueries, poolerQueries } from './database';
+import { farmerQueries, plantQueries, poolerQueries, blockOperationQueries } from './database';
 import { farmerQueriesPhase2 } from './database-phase2';
 import type { FarmerRow } from './database';
 import Config from '../../../Shared/config';
@@ -78,6 +78,9 @@ export class PlantService {
     });
 
     try {
+      // Mark plant operation start in block_operations
+      await this.markPlantOperationStarted(blockIndex, poolerId);
+
       // Update pooler last seen
       await poolerQueries.updatePoolerLastSeen(poolerId);
 
@@ -131,6 +134,9 @@ export class PlantService {
         total_staked: totalStaked,
         processing_time_ms: result.processingTimeMs
       });
+
+      // Update block_operations table with planting results
+      await this.updateBlockOperationsAfterPlanting(blockIndex, result);
 
       return result;
 
@@ -499,6 +505,72 @@ export class PlantService {
       parallel_limit: this.PARALLEL_LIMIT,
       network_info: stellarWalletManager.getNetworkInfo()
     };
+  }
+
+  // ======================
+  // BLOCK OPERATIONS UPDATE
+  // ======================
+
+  private async markPlantOperationStarted(blockIndex: number, poolerId: string): Promise<void> {
+    try {
+      // Ensure block_operations record exists first
+      await blockOperationQueries.createBlockOperation(blockIndex, poolerId, 'active');
+
+      // Mark plant started
+      await blockOperationQueries.updateBlockOperationPlantStarted(blockIndex);
+
+      logger.debug('Marked plant operation started in block_operations', {
+        block_index: blockIndex,
+        pooler_id: poolerId
+      });
+
+    } catch (error) {
+      logger.error('Failed to mark plant operation started', error as Error, {
+        block_index: blockIndex,
+        pooler_id: poolerId
+      });
+      // Don't throw - this is an audit table update, shouldn't fail the main operation
+    }
+  }
+
+  private async updateBlockOperationsAfterPlanting(
+    blockIndex: number, 
+    plantResult: PlantServiceResult
+  ): Promise<void> {
+    try {
+      logger.debug('Updating block_operations table after planting', {
+        block_index: blockIndex,
+        successful_plants: plantResult.successfulPlants.length,
+        total_staked: plantResult.totalStaked
+      });
+
+      // Update block_operations with planting statistics
+      await blockOperationQueries.updateBlockOperationStats(blockIndex, {
+        plant_completed_at: new Date(),
+        total_farmers: plantResult.totalRequested,
+        successful_plants: plantResult.successfulPlants.length,
+        total_staked: plantResult.totalStaked,
+        status: plantResult.successfulPlants.length > 0 ? 'active' : 'failed'
+      });
+
+      logger.info('Block operations updated successfully after planting', {
+        block_index: blockIndex,
+        total_farmers: plantResult.totalRequested,
+        successful_plants: plantResult.successfulPlants.length,
+        total_staked: plantResult.totalStaked
+      });
+
+    } catch (error) {
+      logger.error('Failed to update block_operations after planting', error as Error, {
+        block_index: blockIndex,
+        plant_result: {
+          total_requested: plantResult.totalRequested,
+          successful: plantResult.successfulPlants.length,
+          failed: plantResult.failedPlants.length
+        }
+      });
+      // Don't throw - this is an audit table update, shouldn't fail the main operation
+    }
   }
 }
 
