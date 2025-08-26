@@ -6,7 +6,7 @@
 // ======================
 
 export const KALE_CONTRACT = {
-  MAINNET: {
+  mainnet: {
     CONTRACT_ID: 'CDL74RF5BLYR2YBLCCI7F5FB6TPSCLKEJUBSD2RSVWZ4YHF3VMFAIGWA',
     ASSET_CODE: 'KALE:GBDVX4VELCDSQ54KQJYTNHXAHFLBCA77ZY2USQBM4CSHTTV7DME7KALE',
     SAC_ADDRESS: 'CB23WRDQWGSP6YPMY4UV5C4OW5CBTXKYN3XEATG7KJEZCXMJBYEHOUOV',
@@ -180,7 +180,7 @@ export const isMainnet = (network: string): boolean => {
 };
 
 export const getNetworkConfig = (network: string) => {
-  return isMainnet(network) ? KALE_CONTRACT.MAINNET : KALE_CONTRACT.TESTNET;
+  return isMainnet(network) ? KALE_CONTRACT.mainnet : KALE_CONTRACT.TESTNET;
 };
 
 export const stroopsToXLM = (stroops: number): number => {

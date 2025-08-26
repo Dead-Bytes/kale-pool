@@ -5,6 +5,7 @@ import { scValToNative, xdr } from '@stellar/stellar-sdk';
 import { Server, Durability } from '@stellar/stellar-sdk/rpc';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
+import { blockMonitorLogger as logger } from '../../../Shared/utils/logger';
 import type { 
   ContractData, 
   KaleBlock, 
@@ -415,19 +416,15 @@ class BlockMonitor {
    * Logging helper
    */
   private log(message: string, data?: any): void {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [BlockMonitor] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+    logger.info(message, data);
   }
 
   /**
    * Error logging helper
    */
   private logError(message: string, error: any, data?: any): void {
-    const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] [BlockMonitor] ❌ ${message}:`, error);
-    if (data) {
-      console.error(`[${timestamp}] [BlockMonitor] Context:`, JSON.stringify(data, null, 2));
-    }
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    logger.error(message, errorObj, data);
   }
 }
 

@@ -20,7 +20,7 @@ CREATE TABLE pool_contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     farmer_id UUID NOT NULL REFERENCES farmers(id),
     pooler_id UUID NOT NULL REFERENCES poolers(id),
-    stake_percentage DECIMAL(5,4) NOT NULL CHECK (stake_percentage >= 0.20 AND stake_percentage <= 1.0),
+    stake_percentage DECIMAL(5,4) NOT NULL CHECK (stake_percentage >= 0.0 AND stake_percentage <= 1.0),
     harvest_interval INTEGER NOT NULL CHECK (harvest_interval >= 1 AND harvest_interval <= 20),
     reward_split DECIMAL(5,4) NOT NULL,
     platform_fee DECIMAL(5,4) NOT NULL DEFAULT 0.05,

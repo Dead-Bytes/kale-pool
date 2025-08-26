@@ -186,7 +186,7 @@ export interface ContractOperation {
 // NETWORK CONSTANTS
 // ======================
 
-export const MAINNET_CONFIG: StellarConfig = {
+export const mainnet_CONFIG: StellarConfig = {
   network: 'PUBLIC',
   rpc_url: 'https://mainnet.sorobanrpc.com',
   network_passphrase: 'Public Global Stellar Network ; September 2015',

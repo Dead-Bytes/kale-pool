@@ -3,6 +3,7 @@
 
 import { stellarWalletManager } from './wallet-manager';
 import { farmerQueries, plantQueries, poolerQueries } from './database';
+import { farmerQueriesPhase2 } from './database-phase2';
 import type { FarmerRow } from './database';
 
 // Logger implementation
@@ -147,19 +148,75 @@ export class PlantService {
   // FARMER ELIGIBILITY
   // ======================
 
-  private async getEligibleFarmers(poolerId: string, maxCapacity: number): Promise<FarmerRow[]> {
+  private async getEligibleFarmers(poolerId: string, maxCapacity: number): Promise<any[]> {
     try {
-      // Get all active farmers for the pooler
+      // Phase 2: Get farmers with active contracts (pool-based farming)
+      const contractFarmers = await farmerQueriesPhase2.getFarmersWithActiveContracts(poolerId);
+      
+      if (contractFarmers.length > 0) {
+        logger.debug('Retrieved farmers with active contracts', {
+          pooler_id: poolerId,
+          contract_farmers: contractFarmers.length,
+          max_capacity: maxCapacity
+        });
+
+        // Filter farmers with active contracts and check funding
+        const eligibleFarmers: any[] = [];
+
+        for (const farmer of contractFarmers) {
+          if (eligibleFarmers.length >= maxCapacity) {
+            break;
+          }
+
+          try {
+            // Check if farmer's custodial wallet is funded
+            const isFunded = await stellarWalletManager.isAccountFunded(farmer.custodial_public_key);
+            
+            if (isFunded) {
+              eligibleFarmers.push(farmer);
+              logger.debug('Contract farmer eligible for planting', {
+                farmer_id: farmer.id,
+                stake_percentage: farmer.stake_percentage,
+                harvest_interval: farmer.harvest_interval
+              });
+            } else {
+              logger.warn('Contract farmer wallet not sufficiently funded', {
+                farmer_id: farmer.id,
+                custodial_wallet: farmer.custodial_public_key
+              });
+              
+              // Update farmer funding status
+              await farmerQueriesPhase2.updateFarmerStatus(farmer.id, 'funded'); // Reset to funded status for retry
+            }
+          } catch (error) {
+            logger.error('Failed to check contract farmer funding', error as Error, {
+              farmer_id: farmer.id,
+              custodial_wallet: farmer.custodial_public_key
+            });
+          }
+        }
+
+        logger.info('Contract farmer eligibility check completed', {
+          pooler_id: poolerId,
+          contract_farmers: contractFarmers.length,
+          eligible_farmers: eligibleFarmers.length,
+          max_capacity: maxCapacity
+        });
+
+        return eligibleFarmers;
+      }
+
+      // Fallback to Phase 1: Get all active farmers for the pooler (legacy support)
       const allFarmers = await farmerQueries.getActiveFarmersByPooler(poolerId);
       
-      logger.debug('Retrieved farmers for pooler', {
+      logger.debug('Retrieved legacy farmers for pooler', {
         pooler_id: poolerId,
         total_farmers: allFarmers.length,
         max_capacity: maxCapacity
       });
 
       // Filter out farmers that aren't properly funded
-      const eligibleFarmers: FarmerRow[] = [];
+      const eligibleFarmers: any[] = [];
 
       for (const farmer of allFarmers) {
         if (eligibleFarmers.length >= maxCapacity) {
@@ -173,7 +230,7 @@ export class PlantService {
           if (isFunded) {
             eligibleFarmers.push(farmer);
           } else {
-            logger.warn('Farmer wallet not sufficiently funded', {
+            logger.warn('Legacy farmer wallet not sufficiently funded', {
               farmer_id: farmer.id,
               custodial_wallet: farmer.custodial_public_key
             });
@@ -182,14 +239,14 @@ export class PlantService {
             await farmerQueries.updateFarmerFunding(farmer.id, false);
           }
         } catch (error) {
-          logger.error('Failed to check farmer funding', error as Error, {
+          logger.error('Failed to check legacy farmer funding', error as Error, {
             farmer_id: farmer.id,
             custodial_wallet: farmer.custodial_public_key
           });
         }
       }
 
-      logger.info('Farmer eligibility check completed', {
+      logger.info('Legacy farmer eligibility check completed', {
         pooler_id: poolerId,
         total_farmers: allFarmers.length,
         eligible_farmers: eligibleFarmers.length,
@@ -379,13 +436,15 @@ export class PlantService {
   // STAKE CALCULATION
   // ======================
 
-  private calculateStakeAmount(farmer: FarmerRow): string {
+  private calculateStakeAmount(farmer: any): string {
     try {
       // Get current KALE balance
       const currentBalance = BigInt(farmer.current_balance || '0');
       
       // Calculate stake based on percentage
-      const stakePercentage = farmer.stake_percentage;
+      // Phase 2 (contract farmers) have stake_percentage from pool contracts
+      // Phase 1 (legacy farmers) have stake_percentage from farmer record
+      const stakePercentage = farmer.stake_percentage || 0.1; // Default 10% if not set
       const stakeAmount = (currentBalance * BigInt(Math.floor(stakePercentage * 1000))) / BigInt(1000);
 
       // Ensure minimum stake (could be 0 for new farmers)
@@ -394,9 +453,11 @@ export class PlantService {
 
       logger.debug('Stake calculation completed', {
         farmer_id: farmer.id,
+        farmer_type: farmer.harvest_interval ? 'contract' : 'legacy',
         current_balance: currentBalance.toString(),
         stake_percentage: stakePercentage,
-        calculated_stake: finalStake.toString()
+        calculated_stake: finalStake.toString(),
+        contract_harvest_interval: farmer.harvest_interval || 'N/A'
       });
 
       return finalStake.toString();
@@ -405,7 +466,8 @@ export class PlantService {
       logger.error('Stake calculation failed', error as Error, {
         farmer_id: farmer.id,
         current_balance: farmer.current_balance,
-        stake_percentage: farmer.stake_percentage
+        stake_percentage: farmer.stake_percentage,
+        farmer_type: farmer.harvest_interval ? 'contract' : 'legacy'
       });
 
       // Return 0 stake on calculation error

@@ -1,30 +1,8 @@
 // Database service for KALE Pool Mining Backend
 // Phase 1: PostgreSQL connection and query utilities
 
-// Simple logger implementation
-class DatabaseLogger {
-  constructor(private component: string) {}
-
-  info(message: string, context?: any): void {
-    console.log(`[${new Date().toISOString()}] INFO [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
-  }
-
-  warn(message: string, context?: any): void {
-    console.warn(`[${new Date().toISOString()}] WARN [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
-  }
-
-  error(message: string, error?: Error, context?: any): void {
-    console.error(`[${new Date().toISOString()}] ERROR [${this.component}] ${message} ${error?.message || ''} ${context ? JSON.stringify(context) : ''}`);
-  }
-
-  debug(message: string, context?: any): void {
-    if (process.env.LOG_LEVEL === 'debug') {
-      console.debug(`[${new Date().toISOString()}] DEBUG [${this.component}] ${message} ${context ? JSON.stringify(context) : ''}`);
-    }
-  }
-}
-
-const logger = new DatabaseLogger('DatabaseService');
+// Import centralized logger
+import { databaseLogger as logger } from '../../../Shared/utils/logger';
 
 // Use dynamic import for pg to avoid build issues
 let pgModule: any = null;
