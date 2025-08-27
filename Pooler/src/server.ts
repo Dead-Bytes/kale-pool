@@ -120,38 +120,44 @@ class PoolerService {
         });
 
         const { 
-          block_index, pooler_id, successful_plants, failed_plants, farmers_planted, duration_ms,
-          planted_farmers, plantedFarmers, blockData, block_data 
+          block_index, blockIndex, pooler_id, successful_plants, failed_plants, farmers_planted, duration_ms,
+          planted_farmers, plantedFarmers, blockData, block_data, results 
         } = request.body as any;
 
         // Handle both camelCase and snake_case naming from Backend
+        // Also handle the nested results structure for backward compatibility
+        const actualBlockIndex = block_index || blockIndex;
+        const actualSuccessfulPlants = successful_plants || results?.successfulPlants;
+        const actualFailedPlants = failed_plants || results?.failedPlants;
+        const actualFarmersPlanted = farmers_planted || results?.farmersPlanted;
+        const actualDurationMs = duration_ms || results?.duration;
         const actualPlantedFarmers = planted_farmers || plantedFarmers || [];
         const actualBlockData = blockData || block_data || {};
         
         this.log(`🌱 Received planting status notification`, {
-          block_index,
+          block_index: actualBlockIndex,
           pooler_id,
-          successful_plants,
-          failed_plants,
-          farmers_planted,
-          duration_ms,
+          successful_plants: actualSuccessfulPlants,
+          failed_plants: actualFailedPlants,
+          farmers_planted: actualFarmersPlanted,
+          duration_ms: actualDurationMs,
           has_planted_farmers: actualPlantedFarmers.length > 0,
           planted_farmers_count: actualPlantedFarmers.length,
           has_block_data: !!actualBlockData.entropy
         });
 
         // Log planting results
-        if (successful_plants > 0) {
-          this.log(`✅ Block ${block_index}: ${successful_plants} successful plants`);
+        if (actualSuccessfulPlants > 0) {
+          this.log(`✅ Block ${actualBlockIndex}: ${actualSuccessfulPlants} successful plants`);
         }
-        if (failed_plants > 0) {
-          this.log(`❌ Block ${block_index}: ${failed_plants} failed plants`);
+        if (actualFailedPlants > 0) {
+          this.log(`❌ Block ${actualBlockIndex}: ${actualFailedPlants} failed plants`);
         }
 
         // If we have planted farmers details, schedule work execution
         if (actualPlantedFarmers.length > 0 && actualBlockData.entropy) {
           this.log(`🚜 Scheduling work execution for ${actualPlantedFarmers.length} planted farmers`, {
-            block_index,
+            block_index: actualBlockIndex,
             entropy: actualBlockData.entropy?.substring(0, 16) + '...',
             farmers: actualPlantedFarmers.map((f: any) => ({
               farmer_id: f.farmerId,
@@ -163,15 +169,15 @@ class PoolerService {
             // Create planting notification for pool coordinator
             // Debug block_index parsing
             this.log(`🔍 DEBUG: Parsing blockIndex`, {
-              raw_block_index: block_index,
-              type: typeof block_index,
-              parsed: parseInt(block_index),
-              is_nan: isNaN(parseInt(block_index))
+              raw_block_index: actualBlockIndex,
+              type: typeof actualBlockIndex,
+              parsed: parseInt(actualBlockIndex),
+              is_nan: isNaN(parseInt(actualBlockIndex))
             });
 
-            const parsedBlockIndex = parseInt(block_index);
+            const parsedBlockIndex = parseInt(actualBlockIndex);
             if (isNaN(parsedBlockIndex)) {
-              throw new Error(`Invalid block_index received: ${block_index} (type: ${typeof block_index})`);
+              throw new Error(`Invalid block_index received: ${actualBlockIndex} (type: ${typeof actualBlockIndex})`);
             }
 
             const plantingNotification: PlantingNotification = {
@@ -193,7 +199,7 @@ class PoolerService {
             await poolCoordinator.receivePlantingNotification(plantingNotification);
 
             this.log(`✅ Work execution scheduled successfully`, {
-              block_index,
+              block_index: actualBlockIndex,
               farmers_scheduled: actualPlantedFarmers.length
             });
 
@@ -203,8 +209,8 @@ class PoolerService {
 
         } else {
           this.log(`⚠️  Cannot schedule work - missing planted farmers details or block data`, {
-            block_index,
-            successful_plants,
+            block_index: actualBlockIndex,
+            successful_plants: actualSuccessfulPlants,
             has_planted_farmers: actualPlantedFarmers.length > 0,
             has_entropy: !!actualBlockData.entropy,
             planted_farmers_count: actualPlantedFarmers.length

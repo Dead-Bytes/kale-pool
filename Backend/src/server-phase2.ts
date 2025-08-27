@@ -787,18 +787,16 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
     const notification = {
       event: 'planting_completed',
       backendId: Config.BACKEND.ID,
-      blockIndex: plantingData.blockIndex,
+      block_index: plantingData.blockIndex,
+      pooler_id: poolerId,
       plantingStatus: plantingData.plantingStatus,
-      results: {
-        farmersPlanted: plantingData.farmersPlanted,
-        successfulPlants: plantingData.successfulPlants,
-        failedPlants: plantingData.failedPlants,
-        plantingStartTime: plantingData.plantingStartTime,
-        plantingEndTime: plantingData.plantingEndTime,
-        duration: plantingData.duration,
-        details: plantingData.details
-      },
-      // Add planted farmers for work coordination
+      successful_plants: plantingData.successfulPlants,
+      failed_plants: plantingData.failedPlants,
+      farmers_planted: plantingData.farmersPlanted,
+      duration_ms: plantingData.duration,
+      plantingStartTime: plantingData.plantingStartTime,
+      plantingEndTime: plantingData.plantingEndTime,
+      details: plantingData.details,
       plantedFarmers: plantingData.plantedFarmers || [],
       blockData: plantingData.blockData || {},
       timestamp: new Date().toISOString()

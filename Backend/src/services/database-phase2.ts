@@ -488,14 +488,14 @@ class BlockOperationsQueries {
     
     // Log comprehensive planting results
     const { databaseLogger } = await import('../../../Shared/utils/logger');
-    databaseLogger.info('Block operation updated with planting results', {
+    databaseLogger.info(`Block operation updated with planting results ${JSON.stringify({
       block_operation_id: blockOperationId,
       successful_plants: plantingData.successfulPlants,
       failed_plants: plantingData.failedPlants,
       total_staked: plantingData.totalStaked,
       duration_ms: plantingData.plantingDuration,
       farmers_involved: plantingData.plantingDetails.length
-    });
+    })}`);
   }
 
   async getActiveBlockOperations(limit: number = 10): Promise<any[]> {
