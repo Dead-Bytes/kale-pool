@@ -49,9 +49,9 @@ interface WorkState {
 }
 
 export class WorkManager {
-  private readonly WORK_DELAY_MINUTES = 4; // Wait time after planting
+  private readonly WORK_DELAY_SECONDS = 30; // Wait time after planting (testing)
   private readonly MAX_RECOVERY_ATTEMPTS = 3;
-  private readonly WORK_TIMEOUT_MS = 120000; // 2 minutes per work attempt
+  private readonly WORK_TIMEOUT_MS = 300000; // 5 minutes per work attempt
   private readonly NONCE_COUNT = 10000000; // Default nonce count
 
   private workState: WorkState = {
@@ -62,7 +62,7 @@ export class WorkManager {
 
   constructor() {
     logger.info('WorkManager initialized', {
-      work_delay_minutes: this.WORK_DELAY_MINUTES,
+      work_delay_seconds: this.WORK_DELAY_SECONDS,
       max_recovery_attempts: this.MAX_RECOVERY_ATTEMPTS,
       work_timeout_ms: this.WORK_TIMEOUT_MS
     });
@@ -80,7 +80,7 @@ export class WorkManager {
     return new Promise((resolve, reject) => {
       const blockTimeMs = this.blockTimestampToMs(blockTimestamp);
       const currentTimeMs = Date.now();
-      const targetTimeMs = blockTimeMs + this.WORK_DELAY_MINUTES * 60 * 1000;
+      const targetTimeMs = blockTimeMs + this.WORK_DELAY_SECONDS * 1000;
       const waitTimeMs = Math.max(0, targetTimeMs - currentTimeMs);
 
       logger.info('Work scheduled for planted farmers', {
@@ -182,14 +182,29 @@ export class WorkManager {
       const farmerKeypair = Keypair.fromSecret(workRequest.custodialSecretKey);
       const farmerHex = farmerKeypair.rawPublicKey().toString('hex');
 
-      // Spawn the work process
-      this.workState.workerProcess = spawn([
+      // Validate blockIndex before using it
+      if (blockIndex == null || blockIndex === undefined || isNaN(blockIndex)) {
+        throw new Error(`Invalid blockIndex: ${blockIndex}. Must be a valid number.`);
+      }
+
+      // Debug: Log parameters being passed to kale-farmer
+      const args = [
         '/Users/deadbytes/Documents/Kale-pool/ext/kale-farmer/release/kale-farmer',
         '--farmer-hex', farmerHex,
         '--index', blockIndex.toString(),
         '--entropy-hex', entropy,
-        '--nonce-count', '5' // Target zeros
-      ], { 
+        '--nonce-count', this.NONCE_COUNT.toString()
+      ];
+      
+      logger.debug('Spawning kale-farmer with args', {
+        farmer_id: workRequest.farmerId,
+        args: args,
+        farmer_hex_length: farmerHex.length,
+        entropy_length: entropy.length
+      });
+
+      // Spawn the work process
+      this.workState.workerProcess = spawn(args, { 
         stdout: 'pipe',
         stderr: 'pipe'
       });
@@ -198,14 +213,23 @@ export class WorkManager {
         throw new Error('Failed to spawn work process');
       }
 
-      // Read the work result with timeout
+      // Read both stdout and stderr for debugging
       const workOutput = await Promise.race([
-        this.readWorkStream(this.workState.workerProcess.stdout),
+        this.readWorkStream(this.workState.workerProcess.stdout, this.workState.workerProcess.stderr, workRequest.farmerId),
         this.createTimeout(this.WORK_TIMEOUT_MS)
       ]);
 
       if (!workOutput) {
-        throw new Error('Work process timed out or produced no output');
+        // Try to get stderr output for debugging
+        let stderrOutput = '';
+        try {
+          if (this.workState.workerProcess.stderr) {
+            stderrOutput = await Bun.readableStreamToText(this.workState.workerProcess.stderr);
+          }
+        } catch (e) {
+          // Ignore stderr read errors
+        }
+        throw new Error(`Work process timed out or produced no output. stderr: ${stderrOutput}`);
       }
 
       const workTime = Date.now() - startTime;
@@ -335,7 +359,7 @@ export class WorkManager {
       '--farmer-hex', farmerHex,
       '--index', blockIndex.toString(),
       '--entropy-hex', entropy,
-      '--nonce-count', '5' // Target zeros
+      '--nonce-count', nonceCount.toString()
     ], { 
       stdout: 'pipe',
       stderr: 'pipe'
@@ -343,7 +367,7 @@ export class WorkManager {
 
     try {
       const workOutput = await Promise.race([
-        this.readWorkStream(workerProcess.stdout),
+        this.readWorkStream(workerProcess.stdout, workerProcess.stderr, workRequest.farmerId),
         this.createTimeout(this.WORK_TIMEOUT_MS)
       ]);
 
@@ -374,16 +398,42 @@ export class WorkManager {
   /**
    * Read and parse work stream output
    */
-  private async readWorkStream(stream: ReadableStream<Uint8Array>): Promise<{
+  private async readWorkStream(
+    stdout: ReadableStream<Uint8Array>, 
+    stderr?: ReadableStream<Uint8Array>,
+    farmerId?: string
+  ): Promise<{
     nonce: number;
     hash: string;
     zeros: number;
     gap: number;
   } | null> {
     try {
-      const output = await Bun.readableStreamToText(stream);
+      const output = await Bun.readableStreamToText(stdout);
       
-      if (!output) {
+      // Also read stderr for debugging
+      let stderrOutput = '';
+      if (stderr) {
+        try {
+          stderrOutput = await Bun.readableStreamToText(stderr);
+        } catch (e) {
+          // Ignore stderr errors
+        }
+      }
+      
+      logger.debug('Work process output', {
+        farmer_id: farmerId,
+        stdout_length: output?.length || 0,
+        stderr_length: stderrOutput.length,
+        stdout_preview: output?.substring(0, 200),
+        stderr_preview: stderrOutput.substring(0, 200)
+      });
+      
+      if (!output || output.trim().length === 0) {
+        logger.warn('Work process produced no stdout output', {
+          farmer_id: farmerId,
+          stderr_output: stderrOutput
+        });
         return null;
       }
 
@@ -391,9 +441,19 @@ export class WorkManager {
       const lines = output.trim().split('\n');
       const lastLine = lines[lines.length - 1];
       
-      if (!lastLine) {
+      if (!lastLine || lastLine.trim().length === 0) {
+        logger.warn('Work process stdout has no final line', {
+          farmer_id: farmerId,
+          lines_count: lines.length,
+          stderr_output: stderrOutput
+        });
         return null;
       }
+      
+      logger.debug('Parsing work result line', {
+        farmer_id: farmerId,
+        last_line: lastLine
+      });
       
       const [nonce, hash] = JSON.parse(lastLine);
       
@@ -418,7 +478,9 @@ export class WorkManager {
       };
 
     } catch (error) {
-      logger.error('Failed to parse work stream output', error as Error);
+      logger.error('Failed to parse work stream output', error as Error, {
+        farmer_id: farmerId
+      });
       return null;
     }
   }
@@ -438,6 +500,11 @@ export class WorkManager {
   private blockTimestampToMs(timestamp: number | bigint): number {
     if (typeof timestamp === 'bigint') {
       return Number(timestamp) * 1000;
+    }
+    // If timestamp is already in milliseconds (13 digits), return as is
+    // If timestamp is in seconds (10 digits), multiply by 1000
+    if (timestamp > 10000000000) { // More than 10 billion = milliseconds
+      return timestamp;
     }
     return timestamp * 1000;
   }

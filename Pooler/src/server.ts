@@ -7,6 +7,7 @@ import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import BlockMonitor from './services/block-monitor';
 import { poolCoordinator, type PlantingNotification } from './services/pool-coordinator';
+import { blockMonitorLogger as logger } from '../../Shared/utils/logger';
 import Config from '../../Shared/config';
 
 // Load environment configuration
@@ -160,8 +161,21 @@ class PoolerService {
 
           try {
             // Create planting notification for pool coordinator
+            // Debug block_index parsing
+            this.log(`🔍 DEBUG: Parsing blockIndex`, {
+              raw_block_index: block_index,
+              type: typeof block_index,
+              parsed: parseInt(block_index),
+              is_nan: isNaN(parseInt(block_index))
+            });
+
+            const parsedBlockIndex = parseInt(block_index);
+            if (isNaN(parsedBlockIndex)) {
+              throw new Error(`Invalid block_index received: ${block_index} (type: ${typeof block_index})`);
+            }
+
             const plantingNotification: PlantingNotification = {
-              blockIndex: parseInt(block_index),
+              blockIndex: parsedBlockIndex,
               entropy: actualBlockData.entropy,
               blockTimestamp: actualBlockData.timestamp ? 
                 Math.floor(new Date(actualBlockData.timestamp).getTime() / 1000) :
@@ -495,6 +509,111 @@ class PoolerService {
   }
 
   /**
+   * Check for recent blocks on startup and send discovery notification if needed
+   */
+  private async checkStartupBlockDiscovery(): Promise<void> {
+    try {
+      logger.info('🔍 Checking for recent blocks on startup...');
+      
+      // Get current block data using the block monitor
+      const contractData = await this.blockMonitor.getCurrentContractData();
+      
+      if (!contractData.block || !contractData.block.timestamp) {
+        logger.info('⏭️  No block data available - skipping startup block discovery');
+        return;
+      }
+
+      const blockIndex = contractData.index;
+      const blockTimestamp = contractData.block.timestamp;
+      const blockTimeMs = typeof blockTimestamp === 'bigint' 
+        ? Number(blockTimestamp) * 1000 
+        : blockTimestamp * 1000;
+      
+      const currentTimeMs = Date.now();
+      const blockAgeSeconds = Math.floor((currentTimeMs - blockTimeMs) / 1000);
+      
+      logger.info('📊 Current block status', {
+        block_index: blockIndex,
+        block_age_seconds: blockAgeSeconds,
+        block_timestamp: new Date(blockTimeMs).toISOString(),
+        current_timestamp: new Date(currentTimeMs).toISOString()
+      });
+
+      // If block is less than 120 seconds old, send discovery notification
+      if (blockAgeSeconds < 120) {
+        logger.info('🚀 Block is recent - sending startup discovery notification', {
+          block_index: blockIndex,
+          block_age_seconds: blockAgeSeconds
+        });
+
+        // Send block discovery notification to Backend
+        await this.sendBlockDiscoveryNotification(blockIndex, contractData.block);
+      } else {
+        logger.info('⏰ Block is too old - skipping startup discovery', {
+          block_index: blockIndex,
+          block_age_seconds: blockAgeSeconds,
+          threshold_seconds: 120
+        });
+      }
+
+    } catch (error) {
+      logger.error('Failed to check startup block discovery', error as Error);
+      // Don't throw - this is optional functionality
+    }
+  }
+
+  /**
+   * Send block discovery notification to Backend
+   */
+  private async sendBlockDiscoveryNotification(blockIndex: number, block: any): Promise<void> {
+    try {
+      const entropy = block.entropy ? block.entropy.toString('hex') : '';
+      const blockTimestamp = block.timestamp;
+      const currentTimeMs = Date.now();
+      const blockTimeMs = typeof blockTimestamp === 'bigint' 
+        ? Number(blockTimestamp) * 1000 
+        : blockTimestamp * 1000;
+      const blockAgeSeconds = Math.floor((currentTimeMs - blockTimeMs) / 1000);
+
+      const notification = {
+        poolerId: Config.POOLER.ID,
+        blockIndex,
+        entropy,
+        blockTimestamp: Math.floor(blockTimeMs / 1000), // Convert to seconds
+        blockAge: blockAgeSeconds,
+        discoveredAt: new Date().toISOString(),
+        source: 'startup_check'
+      };
+
+      const response = await fetch(`${Config.BACKEND_API.URL}/pooler/block-discovered`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'KALE-Pool-Pooler/1.0.0'
+        },
+        body: JSON.stringify(notification),
+        signal: AbortSignal.timeout(Config.BACKEND_API.TIMEOUT_MS)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend notification failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      logger.info('✅ Startup block discovery notification sent successfully', {
+        block_index: blockIndex,
+        response_status: response.status,
+        backend_response: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to send startup block discovery notification', error as Error);
+      throw error; // Re-throw so caller can handle
+    }
+  }
+
+  /**
    * Start the pooler service
    */
   async start(): Promise<void> {
@@ -513,6 +632,10 @@ class PoolerService {
       setTimeout(async () => {
         try {
           await this.blockMonitor.startMonitoring();
+          
+          // Check for recent blocks on startup and send discovery if needed
+          await this.checkStartupBlockDiscovery();
+          
           this.log('✅ Pooler service fully initialized');
         } catch (error) {
           this.logError('Failed to start block monitoring', error);

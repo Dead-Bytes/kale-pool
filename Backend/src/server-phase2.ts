@@ -284,6 +284,14 @@ const registerRoutes = (app: express.Application): void => {
               // Re-check active farmers (they might have changed)
               const currentActiveFarmers = await poolContractQueries.getActiveFarmersForPlanting();
               
+              // Get the original block data from the discovery
+              const originalBlockData = {
+                entropy: blockData?.entropy,
+                timestamp: blockData?.timestamp,
+                blockAge: blockData?.blockAge,
+                plantable: blockData?.plantable
+              };
+              
               if (currentActiveFarmers.length > 0) {
                 // Execute parallel plant operations via Launchtube
                 const plantStartTime = new Date();
@@ -335,10 +343,7 @@ const registerRoutes = (app: express.Application): void => {
                   details: plantingResults.details,
                   // Add planted farmers for work coordination
                   plantedFarmers: successfullyPlantedFarmers,
-                  blockData: {
-                    entropy: blockData?.entropy,
-                    timestamp: blockData?.timestamp
-                  }
+                  blockData: originalBlockData
                 });
                 
                 logger.info('Scheduled plant operations completed with Pooler notification', {

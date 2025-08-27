@@ -278,6 +278,13 @@ class BlockMonitor {
   }
 
   /**
+   * Get current contract data (index, block, pail) - public method for startup checks
+   */
+  async getCurrentContractData(): Promise<ContractData> {
+    return this.getContractData();
+  }
+
+  /**
    * Get current contract data (index, block, pail)
    */
   private async getContractData(): Promise<ContractData> {
