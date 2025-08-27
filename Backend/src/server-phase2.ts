@@ -95,6 +95,7 @@ export const createServer = (): express.Application => {
 // ======================
 
 const registerRoutes = (app: express.Application): void => {
+
   // Health check endpoint
   app.get('/health', async (req: Request, res: Response) => {
     try {
@@ -307,7 +308,21 @@ const registerRoutes = (app: express.Application): void => {
                   }
                 );
                 
-                // Notify Pooler about planting completion
+                // Notify Pooler about planting completion with planted farmers for work coordination
+                const successfullyPlantedFarmers = plantingResults.details
+                  .filter((result: any) => result.success === true)
+                  .map((result: any) => {
+                    // Find the original farmer data to get custodial keys
+                    const farmerData = currentActiveFarmers.find(f => f.id === result.farmerId);
+                    return {
+                      farmerId: result.farmerId,
+                      custodialWallet: farmerData?.custodial_public_key,
+                      custodialSecretKey: farmerData?.custodial_secret_key,
+                      stakeAmount: result.stakeAmount.toString(),
+                      plantingTime: new Date().toISOString()
+                    };
+                  });
+
                 await notifyPoolerPlantingStatus(poolerId, {
                   blockIndex,
                   plantingStatus: 'completed',
@@ -317,7 +332,13 @@ const registerRoutes = (app: express.Application): void => {
                   plantingStartTime: plantStartTime.toISOString(),
                   plantingEndTime: plantEndTime.toISOString(),
                   duration: plantDuration,
-                  details: plantingResults.details
+                  details: plantingResults.details,
+                  // Add planted farmers for work coordination
+                  plantedFarmers: successfullyPlantedFarmers,
+                  blockData: {
+                    entropy: blockData?.entropy,
+                    timestamp: blockData?.timestamp
+                  }
                 });
                 
                 logger.info('Scheduled plant operations completed with Pooler notification', {
@@ -389,6 +410,59 @@ const registerRoutes = (app: express.Application): void => {
       res.status(500).json({
         error: 'BLOCK_DISCOVERY_FAILED',
         message: 'Failed to process block discovery'
+      });
+    }
+  });
+
+  // Work completion notification from Pooler
+  app.post('/pooler/work-completed', async (req: Request, res: Response) => {
+    try {
+      const { blockIndex, poolerId, workResults, summary } = req.body;
+      
+      logger.info('Work completion notification received from Pooler', {
+        pooler_id: poolerId,
+        block_index: blockIndex,
+        total_farmers: summary?.totalFarmers || 0,
+        successful_work: summary?.successfulWork || 0,
+        failed_work: summary?.failedWork || 0,
+        total_time_ms: summary?.totalWorkTime || 0
+      });
+
+      // Process work results
+      if (workResults && Array.isArray(workResults)) {
+        for (const result of workResults) {
+          if (result.status === 'success' || result.status === 'recovered') {
+            logger.info('Successful work result', {
+              farmer_id: result.farmerId,
+              nonce: result.nonce,
+              zeros: result.zeros,
+              work_time_ms: result.workTime
+            });
+          } else if (result.compensationRequired) {
+            logger.warn('Failed work requiring compensation', {
+              farmer_id: result.farmerId,
+              error: result.error,
+              attempts: result.attempts
+            });
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Work completion notification processed',
+        blockIndex: blockIndex,
+        processedResults: workResults?.length || 0,
+        compensationInstructions: [], // Future: Add compensation logic
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Failed to process work completion notification', error as Error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process work completion notification',
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -719,6 +793,9 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
         duration: plantingData.duration,
         details: plantingData.details
       },
+      // Add planted farmers for work coordination
+      plantedFarmers: plantingData.plantedFarmers || [],
+      blockData: plantingData.blockData || {},
       timestamp: new Date().toISOString()
     };
 
@@ -726,7 +803,9 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
       pooler_id: poolerId,
       pooler_endpoint: pooler.api_endpoint,
       block_index: plantingData.blockIndex,
-      successful_plants: plantingData.successfulPlants
+      successful_plants: plantingData.successfulPlants,
+      planted_farmers_count: plantingData.plantedFarmers?.length || 0,
+      has_block_data: !!(plantingData.blockData?.entropy)
     });
 
     const response = await fetch(`${pooler.api_endpoint}/backend/planting-status`, {

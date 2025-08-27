@@ -18,12 +18,13 @@
     "skipLibCheck": true,
     "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../",
     "resolveJsonModule": true,
     "types": ["bun-types"]
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "../Shared/**/*"
   ],
   "exclude": [
     "node_modules",

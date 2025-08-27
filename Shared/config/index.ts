@@ -37,6 +37,7 @@ if (!envLoaded) {
 declare const process: { 
   env: Record<string, string | undefined>;
   exit: (code?: number) => never;
+  cwd: () => string;
 };
 
 interface KalePoolConfig {
@@ -57,6 +58,7 @@ interface KalePoolConfig {
     HOST: string;
     PORT: number;
     ID: string;
+    AUTH_TOKEN: string;
   };
   
   // Database configuration
@@ -178,6 +180,7 @@ function loadConfig(): KalePoolConfig {
         HOST: validateEnvironmentVariable('HOST', process.env.HOST, false) || '0.0.0.0',
         PORT: validateNumericEnvironmentVariable('POOLER_PORT', process.env.POOLER_PORT, false, 3001),
         ID: validateEnvironmentVariable('POOLER_ID', process.env.POOLER_ID, false) || '12345678-1234-5678-9abc-123456789000',
+        AUTH_TOKEN: validateEnvironmentVariable('POOLER_AUTH_TOKEN', process.env.POOLER_AUTH_TOKEN, false) || 'dev-api-key-for-testing-only',
       },
       
       // Database configuration

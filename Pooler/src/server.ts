@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import BlockMonitor from './services/block-monitor';
+import { poolCoordinator, type PlantingNotification } from './services/pool-coordinator';
 import Config from '../../Shared/config';
 
 // Load environment configuration
@@ -111,7 +112,20 @@ class PoolerService {
     // Backend planting status notification endpoint
     this.app.post('/backend/planting-status', async (request, reply) => {
       try {
-        const { block_index, pooler_id, successful_plants, failed_plants, farmers_planted, duration_ms } = request.body as any;
+        // Log the full request body for debugging
+        this.log(`🌱 Received planting status notification (full payload)`, {
+          body: request.body,
+          headers: request.headers
+        });
+
+        const { 
+          block_index, pooler_id, successful_plants, failed_plants, farmers_planted, duration_ms,
+          planted_farmers, plantedFarmers, blockData, block_data 
+        } = request.body as any;
+
+        // Handle both camelCase and snake_case naming from Backend
+        const actualPlantedFarmers = planted_farmers || plantedFarmers || [];
+        const actualBlockData = blockData || block_data || {};
         
         this.log(`🌱 Received planting status notification`, {
           block_index,
@@ -119,7 +133,10 @@ class PoolerService {
           successful_plants,
           failed_plants,
           farmers_planted,
-          duration_ms
+          duration_ms,
+          has_planted_farmers: actualPlantedFarmers.length > 0,
+          planted_farmers_count: actualPlantedFarmers.length,
+          has_block_data: !!actualBlockData.entropy
         });
 
         // Log planting results
@@ -128,6 +145,56 @@ class PoolerService {
         }
         if (failed_plants > 0) {
           this.log(`❌ Block ${block_index}: ${failed_plants} failed plants`);
+        }
+
+        // If we have planted farmers details, schedule work execution
+        if (actualPlantedFarmers.length > 0 && actualBlockData.entropy) {
+          this.log(`🚜 Scheduling work execution for ${actualPlantedFarmers.length} planted farmers`, {
+            block_index,
+            entropy: actualBlockData.entropy?.substring(0, 16) + '...',
+            farmers: actualPlantedFarmers.map((f: any) => ({
+              farmer_id: f.farmerId,
+              custodial_wallet: f.custodialWallet
+            }))
+          });
+
+          try {
+            // Create planting notification for pool coordinator
+            const plantingNotification: PlantingNotification = {
+              blockIndex: parseInt(block_index),
+              entropy: actualBlockData.entropy,
+              blockTimestamp: actualBlockData.timestamp ? 
+                Math.floor(new Date(actualBlockData.timestamp).getTime() / 1000) :
+                Math.floor(Date.now() / 1000),
+              plantedFarmers: actualPlantedFarmers.map((farmer: any) => ({
+                farmerId: farmer.farmerId,
+                custodialWallet: farmer.custodialWallet,
+                custodialSecretKey: farmer.custodialSecretKey,
+                stakeAmount: farmer.stakeAmount,
+                plantingTime: new Date(farmer.plantingTime || Date.now())
+              }))
+            };
+
+            // Schedule work execution via pool coordinator
+            await poolCoordinator.receivePlantingNotification(plantingNotification);
+
+            this.log(`✅ Work execution scheduled successfully`, {
+              block_index,
+              farmers_scheduled: actualPlantedFarmers.length
+            });
+
+          } catch (error) {
+            this.logError('Failed to schedule work execution', error);
+          }
+
+        } else {
+          this.log(`⚠️  Cannot schedule work - missing planted farmers details or block data`, {
+            block_index,
+            successful_plants,
+            has_planted_farmers: actualPlantedFarmers.length > 0,
+            has_entropy: !!actualBlockData.entropy,
+            planted_farmers_count: actualPlantedFarmers.length
+          });
         }
 
         reply.send({
@@ -140,6 +207,54 @@ class PoolerService {
         reply.status(500).send({
           success: false,
           error: 'Failed to process planting status'
+        });
+      }
+    });
+
+    // Planted farmers notification endpoint for work coordination
+    this.app.post('/backend/planted-farmers', async (request, reply) => {
+      try {
+        // Validate authorization
+        const authorization = request.headers.authorization;
+        if (!authorization || !authorization.startsWith('Bearer ')) {
+          return reply.status(401).send({ 
+            success: false, 
+            error: 'Authorization header required' 
+          });
+        }
+
+        const token = authorization.replace('Bearer ', '');
+        if (token !== Config.POOLER.AUTH_TOKEN) {
+          return reply.status(403).send({ 
+            success: false, 
+            error: 'Invalid authorization token' 
+          });
+        }
+
+        const plantingNotification = request.body as PlantingNotification;
+        
+        this.log(`🌱 Received planted farmers notification for work coordination`, {
+          block_index: plantingNotification.blockIndex,
+          farmer_count: plantingNotification.plantedFarmers.length,
+          entropy: plantingNotification.entropy.substring(0, 16) + '...'
+        });
+
+        // Pass to pool coordinator for work scheduling
+        await poolCoordinator.receivePlantingNotification(plantingNotification);
+
+        reply.send({
+          success: true,
+          message: 'Planted farmers notification received and work scheduled',
+          block_index: plantingNotification.blockIndex,
+          farmers_scheduled: plantingNotification.plantedFarmers.length,
+          acknowledged_at: new Date().toISOString()
+        });
+
+      } catch (error) {
+        this.logError('Failed to process planted farmers notification', error);
+        reply.status(500).send({
+          success: false,
+          error: 'Failed to process planted farmers notification'
         });
       }
     });
@@ -164,6 +279,181 @@ class PoolerService {
         reply.status(500).send({
           success: false,
           error: 'Block check failed',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
+    // Work coordination status endpoint
+    this.app.get('/status/work', async (request, reply) => {
+      const coordinatorStatus = poolCoordinator.getStatus();
+      const blockMonitorStatus = this.blockMonitor.getStatus();
+      
+      reply.send({
+        service: 'KALE Pool Work Coordination',
+        timestamp: new Date().toISOString(),
+        block_monitoring: {
+          current_block: blockMonitorStatus.currentBlock,
+          is_monitoring: blockMonitorStatus.isMonitoring,
+          blocks_discovered: blockMonitorStatus.blocksDiscovered
+        },
+        work_coordination: {
+          pending_work_blocks: coordinatorStatus.pendingWorkBlocks,
+          active_work_blocks: coordinatorStatus.activeWorkBlocks,
+          work_manager: coordinatorStatus.workManagerStatus
+        }
+      });
+    });
+
+    // Emergency stop endpoint (debug)
+    this.app.post('/debug/emergency-stop', async (request, reply) => {
+      if (!Config.DEBUG.ENDPOINTS_ENABLED) {
+        return reply.status(404).send({ error: 'Debug endpoints disabled' });
+      }
+
+      try {
+        this.log('🚨 Emergency stop triggered via API');
+        poolCoordinator.emergencyStop();
+        
+        reply.send({
+          success: true,
+          message: 'Emergency stop executed',
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        this.logError('Emergency stop failed', error);
+        reply.status(500).send({
+          success: false,
+          error: 'Emergency stop failed'
+        });
+      }
+    });
+
+    // Test work execution endpoint (debug)
+    this.app.post('/debug/test-work', async (request, reply) => {
+      if (!Config.DEBUG.ENDPOINTS_ENABLED) {
+        return reply.status(404).send({ error: 'Debug endpoints disabled' });
+      }
+
+      try {
+        const { blockIndex, entropy, farmers } = request.body as any;
+        
+        if (!blockIndex || !entropy || !farmers || !Array.isArray(farmers)) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Missing required fields: blockIndex, entropy, farmers[]'
+          });
+        }
+
+        this.log('🧪 Test work execution triggered via API', {
+          block_index: blockIndex,
+          farmer_count: farmers.length
+        });
+
+        // Create test planting notification
+        const testNotification: PlantingNotification = {
+          blockIndex: parseInt(blockIndex),
+          entropy,
+          blockTimestamp: Math.floor(Date.now() / 1000), // Current timestamp
+          plantedFarmers: farmers.map((farmer: any) => ({
+            farmerId: farmer.farmerId || `test-farmer-${Math.random().toString(36).substring(7)}`,
+            custodialWallet: farmer.custodialWallet || 'GBQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE',
+            custodialSecretKey: farmer.custodialSecretKey || 'SCQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE',
+            stakeAmount: farmer.stakeAmount || '1000000',
+            plantingTime: new Date()
+          }))
+        };
+
+        // Submit to pool coordinator
+        await poolCoordinator.receivePlantingNotification(testNotification);
+        
+        reply.send({
+          success: true,
+          message: 'Test work execution initiated',
+          block_index: blockIndex,
+          farmers_scheduled: testNotification.plantedFarmers.length,
+          timestamp: new Date().toISOString()
+        });
+
+      } catch (error) {
+        this.logError('Test work execution failed', error);
+        reply.status(500).send({
+          success: false,
+          error: 'Test work execution failed',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
+    // Test planted farmers notification endpoint (debug) 
+    this.app.post('/debug/test-planted-notification', async (request, reply) => {
+      if (!Config.DEBUG.ENDPOINTS_ENABLED) {
+        return reply.status(404).send({ error: 'Debug endpoints disabled' });
+      }
+
+      try {
+        this.log('🧪 Testing planted farmers notification with mock data');
+
+        // Create a mock notification that simulates what the Backend should send
+        const mockNotification = {
+          event: 'planting_completed',
+          backendId: 'kale-pool-backend',
+          blockIndex: 99999,
+          plantingStatus: 'completed',
+          results: {
+            farmersPlanted: 1,
+            successfulPlants: 1,
+            failedPlants: 0,
+            plantingStartTime: new Date(Date.now() - 30000).toISOString(),
+            plantingEndTime: new Date().toISOString(),
+            duration: 30000,
+            details: [{
+              farmerId: 'test-farmer-123',
+              success: true,
+              stakeAmount: 1000000,
+              transactionHash: 'test-tx-hash'
+            }]
+          },
+          plantedFarmers: [{
+            farmerId: 'test-farmer-123',
+            custodialWallet: 'GBQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE',
+            custodialSecretKey: 'SAQHTQ7NTSKHVTSVM6EHUO3TU4P4BK2TAAII25V2TT2Q6OWXUJWEKALE',
+            stakeAmount: '1000000',
+            plantingTime: new Date().toISOString()
+          }],
+          blockData: {
+            entropy: '0000007e7c869191abc123def456789012345678901234567890123456789012',
+            timestamp: Math.floor(Date.now() / 1000)
+          },
+          timestamp: new Date().toISOString()
+        };
+
+        // Simulate the enhanced planting notification
+        const response = await fetch('http://localhost:3001/backend/planting-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Config.POOLER.AUTH_TOKEN}`,
+            'X-Backend-ID': 'test-backend'
+          },
+          body: JSON.stringify(mockNotification)
+        });
+
+        const result = await response.json();
+
+        reply.send({
+          success: true,
+          message: 'Test planted farmers notification sent',
+          mock_notification: mockNotification,
+          pooler_response: result,
+          timestamp: new Date().toISOString()
+        });
+
+      } catch (error) {
+        this.logError('Test planted farmers notification failed', error);
+        reply.status(500).send({
+          success: false,
+          error: 'Test failed',
           message: error instanceof Error ? error.message : 'Unknown error'
         });
       }
