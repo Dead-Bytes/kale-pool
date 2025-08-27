@@ -5,6 +5,8 @@ import { config } from 'dotenv';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
+config()
+
 // Load environment variables from appropriate .env file
 // Try multiple paths to find the correct .env file
 const envPaths = [
@@ -166,7 +168,7 @@ function loadConfig(): KalePoolConfig {
       // Backend API settings
       BACKEND: {
         HOST: validateEnvironmentVariable('HOST', process.env.HOST, false) || '0.0.0.0',
-        PORT: validateNumericEnvironmentVariable('PORT', process.env.PORT, false, 3000),
+        PORT: validateNumericEnvironmentVariable('BACKEND_PORT', process.env.BACKEND_PORT || process.env.PORT, false, 3000),
         ID: validateEnvironmentVariable('BACKEND_ID', process.env.BACKEND_ID, false) || 'kale-pool-backend',
         CORS_ORIGIN: parseCorsOrigins(process.env.CORS_ORIGIN),
       },
@@ -174,7 +176,7 @@ function loadConfig(): KalePoolConfig {
       // Pooler settings
       POOLER: {
         HOST: validateEnvironmentVariable('HOST', process.env.HOST, false) || '0.0.0.0',
-        PORT: validateNumericEnvironmentVariable('PORT', process.env.PORT, false, 3001),
+        PORT: validateNumericEnvironmentVariable('POOLER_PORT', process.env.POOLER_PORT, false, 3001),
         ID: validateEnvironmentVariable('POOLER_ID', process.env.POOLER_ID, false) || '12345678-1234-5678-9abc-123456789000',
       },
       
