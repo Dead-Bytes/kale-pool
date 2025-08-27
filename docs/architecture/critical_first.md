@@ -1,4 +1,4 @@
-```
+```mermaid
 sequenceDiagram
     participant PM as Pooler Machine<br/>Block Monitor
     participant API as Backend API<br/>Plant Coordinator
