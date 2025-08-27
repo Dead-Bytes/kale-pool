@@ -52,6 +52,7 @@ export class LaunchtubeService {
     this.networkPassphrase = Config.STELLAR.NETWORK_PASSPHRASE;
 
     // Initialize KALE contract client (like in reference files)
+    // Note: We'll create fresh clients per transaction with proper source accounts
     this.contract = new Client({
       rpcUrl: this.rpcUrl,
       contractId: this.contractId,
@@ -113,34 +114,43 @@ export class LaunchtubeService {
       } else {
         const errorText = await response.text();
         
-        // Parse the error to check for specific issues
+        // 🔍 SHOW COMPLETE RAW RESPONSE FOR DIAGNOSIS
+        console.log('🚨 ========== LAUNCHTUBE ERROR RESPONSE ==========');
+        console.log(`🌐 URL: ${this.launchtubeUrl}`);
+        console.log(`📊 Status: ${response.status} ${response.statusText}`);
+        console.log(`📏 Content Length: ${errorText.length}`);
+        console.log('📋 Headers:');
+        for (const [key, value] of response.headers.entries()) {
+          console.log(`   ${key}: ${value}`);
+        }
+        console.log('📄 RAW RESPONSE BODY:');
+        console.log(errorText);
+        console.log('🚨 =============================================');
+        
+        // Try to parse for structured details but keep raw response primary
         let parsedError;
         try {
           parsedError = JSON.parse(errorText);
-        } catch (e) {
-          parsedError = { error: errorText };
-        }
-        
-        // Check for unfunded account error
-        if (parsedError.status === 'NOT_FOUND') {
-          logger.warn('Transaction failed - account not found (likely unfunded)', {
-            error: 'Account does not exist on Stellar network',
-            suggestion: 'Fund the custodial wallet with XLM before attempting transactions'
+          logger.error('🔍 PARSED ERROR OBJECT', {
+            parsed_error: parsedError
           });
-          
-          return {
-            success: false,
-            error: 'Account not found - wallet needs funding with XLM on mainnet',
-            details: { ...parsedError, error_type: 'UNFUNDED_ACCOUNT' }
-          };
+        } catch (e) {
+          logger.error('🔍 RESPONSE IS NOT JSON', {
+            parse_error: e,
+            raw_text: errorText
+          });
+          parsedError = { error: errorText, raw_response: errorText };
         }
-        
-        logger.error('Transaction submission failed', undefined, { error: errorText, status: response.status });
         
         return {
           success: false,
-          error: errorText,
-          details: parsedError
+          error: `RAW_RESPONSE: ${errorText}`,
+          details: { 
+            raw_response: errorText,
+            status_code: response.status,
+            status_text: response.statusText,
+            parsed_error: parsedError
+          }
         };
       }
     } catch (error) {
@@ -155,21 +165,48 @@ export class LaunchtubeService {
 
   /**
    * Plant operation - creates a Pail for the farmer with stake
+   * Includes retry logic to keep trying until success
    */
-  async plant(request: PlantRequest): Promise<LaunchtubeResponse> {
-    try {
-      const { farmerPublicKey, farmerSecretKey, stakeAmount } = request;
-      
-      logger.info('Starting plant operation', {
+  async plant(request: PlantRequest, maxRetries: number = 5): Promise<LaunchtubeResponse> {
+    const { farmerPublicKey, farmerSecretKey, stakeAmount } = request;
+    
+    logger.info('🌱 Starting plant operation with retry logic', {
+      farmer: farmerPublicKey,
+      stake_amount: stakeAmount.toString(),
+      max_retries: maxRetries
+    });
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      logger.info(`🌱 Plant attempt ${attempt}/${maxRetries}`, {
         farmer: farmerPublicKey,
         stake_amount: stakeAmount.toString()
       });
 
-      // Create the plant transaction
-      const transaction = await this.contract.plant({
-        farmer: farmerPublicKey,
-        amount: stakeAmount,
-      });
+      try {
+        // 🔍 DEBUG: Check if we need fresh client instance for each transaction
+        console.log('🔍 ========== CLIENT DEBUG INFO ==========');
+        console.log(`👨‍🌾 Farmer: ${farmerPublicKey}`);
+        console.log(`💰 Stake: ${stakeAmount.toString()}`);
+        console.log(`📡 RPC URL: ${this.rpcUrl}`);
+        console.log(`📝 Contract ID: ${this.contractId}`);
+        console.log(`🌐 Network: ${this.networkPassphrase}`);
+        
+        // Create FRESH client instance (following reference utils.ts pattern)
+        console.log('🔄 Creating fresh Client instance (no publicKey like reference)...');
+        const freshContract = new Client({
+          rpcUrl: this.rpcUrl,
+          contractId: this.contractId,
+          networkPassphrase: this.networkPassphrase,
+        });
+        
+        console.log('✅ Fresh client created, building transaction...');
+        console.log('🔍 ==========================================');
+
+        // Create the plant transaction with fresh client
+        const transaction = await freshContract.plant({
+          farmer: farmerPublicKey,
+          amount: stakeAmount,
+        });
 
       // Check for simulation errors (following enhanced-farmer.ts pattern)
       if (Api.isSimulationError(transaction.simulation!)) {
@@ -190,44 +227,79 @@ export class LaunchtubeService {
             details: { simulation_error: errorMsg }
           };
         }
+      } else {
+        // ONLY sign and send if simulation is successful (following reference pattern)
+        // Sign auth entries (following reference plant_and_work.ts pattern)
+        const farmerSigner = basicNodeSigner(
+          Keypair.fromSecret(farmerSecretKey), 
+          this.networkPassphrase
+        );
+
+        await transaction.signAuthEntries({
+          address: farmerPublicKey,
+          signAuthEntry: farmerSigner.signAuthEntry,
+        });
+
+        // Submit via Launchtube (following reference send function)
+        // CRITICAL: Must submit the built/signed transaction XDR, not the transaction object
+        const transactionXdr = transaction.built!.toXDR();
+        
+        // 🔍 LOG THE XDR FOR DIAGNOSIS
+        console.log('🔍 ========== TRANSACTION XDR FOR DIAGNOSIS ==========');
+        console.log(`👨‍🌾 Farmer: ${farmerPublicKey}`);
+        console.log(`💰 Stake: ${stakeAmount.toString()}`);
+        console.log(`📏 XDR Length: ${transactionXdr.length}`);
+        console.log('📜 TRANSACTION XDR:');
+        console.log(transactionXdr);
+        console.log('🔍 ================================================');
+        
+        const result = await this.submitTransaction(transactionXdr);
+      
+        if (result.success) {
+          logger.info('Plant operation successful', {
+            farmer: farmerPublicKey,
+            transaction_hash: result.transactionHash,
+            stake_amount: stakeAmount.toString()
+          });
+        }
+
+        return result;
       }
 
-      // Sign auth entries (following enhanced-farmer.ts pattern)
-      const farmerSigner = basicNodeSigner(
-        Keypair.fromSecret(farmerSecretKey), 
-        this.networkPassphrase
-      );
-
-      await transaction.signAuthEntries({
-        address: farmerPublicKey,
-        signAuthEntry: farmerSigner.signAuthEntry,
-      });
-
-      // Submit via Launchtube (following reference send function)
-      const result = await this.submitTransaction(transaction);
-      
-      if (result.success) {
-        logger.info('Plant operation successful', {
+      } catch (error) {
+        logger.error(`Plant attempt ${attempt}/${maxRetries} failed`, error as Error, {
           farmer: farmerPublicKey,
-          transaction_hash: result.transactionHash,
           stake_amount: stakeAmount.toString()
         });
+
+        // If this was the last attempt, return the error
+        if (attempt === maxRetries) {
+          logger.error('🚨 All plant attempts failed', error as Error, {
+            farmer: farmerPublicKey,
+            stake_amount: stakeAmount.toString(),
+            attempts_made: maxRetries
+          });
+
+          return {
+            success: false,
+            error: `All ${maxRetries} plant attempts failed: ${(error as Error).message}`,
+            details: { error, attempts_made: maxRetries }
+          };
+        }
+
+        // Wait before retrying (exponential backoff)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+        logger.info(`⏳ Waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
-
-      return result;
-
-    } catch (error) {
-      logger.error('Plant operation failed', error as Error, {
-        farmer: request.farmerPublicKey,
-        stake_amount: request.stakeAmount.toString()
-      });
-
-      return {
-        success: false,
-        error: (error as Error).message,
-        details: error
-      };
     }
+
+    // This should never be reached due to the logic above
+    return {
+      success: false,
+      error: 'Unexpected error in retry loop',
+      details: { max_retries: maxRetries }
+    };
   }
 
   /**
@@ -243,8 +315,15 @@ export class LaunchtubeService {
         hash: hash.subarray(0, 4).toString('hex') + '...'
       });
 
+      // Create FRESH client (following reference utils.ts pattern)
+      const freshContract = new Client({
+        rpcUrl: this.rpcUrl,
+        contractId: this.contractId,
+        networkPassphrase: this.networkPassphrase,
+      });
+
       // Create the work transaction
-      const transaction = await this.contract.work({
+      const transaction = await freshContract.work({
         farmer: farmerPublicKey,
         hash: hash,
         nonce: nonce,
@@ -275,7 +354,7 @@ export class LaunchtubeService {
       });
 
       // Submit via Launchtube
-      const result = await this.submitTransaction(transaction);
+      const result = await this.submitTransaction(transaction.built!.toXDR());
       
       if (result.success) {
         logger.info('Work operation successful', {
@@ -313,8 +392,15 @@ export class LaunchtubeService {
         block_index: blockIndex
       });
 
+      // Create FRESH client (following reference utils.ts pattern)
+      const freshContract = new Client({
+        rpcUrl: this.rpcUrl,
+        contractId: this.contractId,
+        networkPassphrase: this.networkPassphrase,
+      });
+
       // Create the harvest transaction
-      const transaction = await this.contract.harvest({
+      const transaction = await freshContract.harvest({
         farmer: farmerPublicKey,
         index: blockIndex,
       });
@@ -359,7 +445,7 @@ export class LaunchtubeService {
       });
 
       // Submit via Launchtube
-      const result = await this.submitTransaction(transaction);
+      const result = await this.submitTransaction(transaction.built!.toXDR());
       
       if (result.success) {
         const reward = transaction.simulation?.result?.retval;
@@ -400,7 +486,7 @@ export class LaunchtubeService {
       const batch = requests.slice(i, i + concurrency);
       
       const batchResults = await Promise.all(
-        batch.map(request => this.plant(request))
+        batch.map(request => this.plant(request, 3)) // Reduced retries for batch to avoid overwhelming
       );
       
       results.push(...batchResults);

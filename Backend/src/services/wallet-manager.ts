@@ -188,12 +188,12 @@ export class StellarWalletManager {
       // Convert stake amount to BigInt (KALE uses stroops: 1 KALE = 10^7 stroops)
       const stakeAmountBigInt = BigInt(Math.floor(parseFloat(stakeAmount) * 10_000_000));
 
-      // Use Launchtube service for plant operation
+      // Use Launchtube service for plant operation with retry logic
       const result: LaunchtubeResponse = await launchtubeService.plant({
         farmerPublicKey,
         farmerSecretKey,
         stakeAmount: stakeAmountBigInt
-      });
+      }, 10); // Retry up to 10 times for plant operations
 
       if (result.success) {
         logger.info('Plant operation successful via Launchtube', {
