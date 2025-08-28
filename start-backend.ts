@@ -148,20 +148,40 @@ class KaleBackendStarter {
         console.log('   ⚠️  Database connection failed - migrations may fail');
       }
 
-      // Run migrations
-      console.log('   🔧 Running database migrations...');
+      // Complete database migration - create DB + schema
+      console.log('   🔧 Running complete database migration...');
       try {
-        process.chdir(this.backendPath);
-        const migrationEnv = { 
-          ...process.env, 
-          DATABASE_URL: Config.DATABASE.URL
-        };
-        execSync('bun run db:migrate', { stdio: 'pipe', env: migrationEnv });
-        console.log('   ✅ Database migrations completed');
-        process.chdir('..');
+        // Extract database name from URL
+        const dbUrl = Config.DATABASE.URL;
+        const dbName = dbUrl.split('/').pop()?.split('?')[0] || 'kale_pool_mainnet';
+        const baseDbUrl = dbUrl.replace(`/${dbName}`, '/postgres');
+        
+        // 1. Create database if it doesn't exist
+        console.log('   📊 Creating database if needed...');
+        try {
+          execSync(`psql "${baseDbUrl}" -c "CREATE DATABASE ${dbName};"`, { stdio: 'pipe' });
+          console.log('   ✅ Database created');
+        } catch (createError: any) {
+          if (createError.message.includes('already exists')) {
+            console.log('   ✅ Database already exists');
+          } else {
+            console.log(`   ⚠️  Database creation warning: ${createError.message}`);
+          }
+        }
+
+        // 2. Apply complete schema
+        const schemaPath = path.join(process.cwd(), 'Shared', 'database', 'complete-schema.sql');
+        if (existsSync(schemaPath)) {
+          console.log('   🏗️  Applying complete schema...');
+          execSync(`psql "${dbUrl}" -f "${schemaPath}"`, { stdio: 'pipe' });
+          console.log('   ✅ Complete database schema applied');
+        } else {
+          console.log('   ❌ Schema file not found!');
+          throw new Error('Schema file missing');
+        }
       } catch (error: any) {
-        console.log(`   ⚠️  Database migrations failed: ${error.message}`);
-        process.chdir('..');
+        console.log(`   ❌ Database migration failed: ${error.message}`);
+        this.status.errors.push(`Database migration failed: ${error.message}`);
       }
       
     } catch (error: any) {

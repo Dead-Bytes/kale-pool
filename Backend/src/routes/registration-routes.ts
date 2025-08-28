@@ -599,3 +599,90 @@ export const confirmPoolJoin = async (req: Request, res: Response): Promise<void
     });
   }
 };
+
+// ======================
+// POOLER REGISTRATION ENDPOINTS
+// ======================
+
+export const registerPooler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, poolerName, publicKey, apiEndpoint, maxFarmers, rewardPercentage } = req.body;
+
+    // Input validation
+    if (!email || !poolerName || !publicKey) {
+      res.status(400).json({
+        error: 'MISSING_FIELDS',
+        message: 'Email, pooler name, and public key are required'
+      });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      res.status(400).json({
+        error: 'INVALID_EMAIL',
+        message: 'Please provide a valid email address'
+      });
+      return;
+    }
+
+    if (!isValidStellarAddress(publicKey)) {
+      res.status(400).json({
+        error: 'INVALID_PUBLIC_KEY',
+        message: 'Please provide a valid Stellar public key'
+      });
+      return;
+    }
+
+    logger.info('Processing pooler registration', { email, pooler_name: poolerName });
+
+    // Check if email already exists
+    const existingUser = await userQueries.getUserByEmail(email);
+    if (existingUser) {
+      res.status(409).json({
+        error: 'EMAIL_EXISTS',
+        message: 'An account with this email already exists'
+      });
+      return;
+    }
+
+    // Generate API key for the pooler
+    const apiKey = `pooler_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create user record for pooler
+    const userId = await userQueries.createUser(email, publicKey);
+    
+    // Create pooler record
+    const poolerId = await poolerQueriesPhase2.createPooler(
+      poolerName,
+      publicKey,
+      apiKey,
+      apiEndpoint || 'http://localhost:3001',
+      maxFarmers || 100,
+      rewardPercentage || 0.05
+    );
+
+    logger.info('Pooler registration successful', {
+      user_id: userId,
+      pooler_id: poolerId,
+      pooler_name: poolerName
+    });
+
+    res.status(201).json({
+      userId,
+      poolerId,
+      poolerName,
+      apiKey,
+      publicKey,
+      status: 'registered',
+      message: 'Pooler registration successful. Save your API key securely.',
+      createdAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Pooler registration error', error as Error);
+    res.status(500).json({
+      error: 'POOLER_REGISTRATION_FAILED',
+      message: 'Failed to register pooler'
+    });
+  }
+};

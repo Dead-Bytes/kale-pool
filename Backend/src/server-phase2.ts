@@ -6,6 +6,7 @@ import cors from 'cors';
 import { plantService } from './services/plant-service';
 import { workService } from './services/work-service';
 import { harvestService } from './services/harvest-service';
+import { automatedHarvestService } from './services/automated-harvest-service';
 import { stellarWalletManager } from './services/wallet-manager';
 import { initializeDatabase } from './services/database';
 import Config from '../../Shared/config';
@@ -18,7 +19,8 @@ import {
   getAvailablePoolers, 
   getPoolerDetails,
   joinPool,
-  confirmPoolJoin
+  confirmPoolJoin,
+  registerPooler
 } from './routes/registration-routes';
 
 // Import centralized logger
@@ -105,7 +107,8 @@ const registerRoutes = (app: express.Application): void => {
         harvestService.isHealthy()
       ]);
 
-      const healthy = plantHealthy && workHealthy && harvestHealthy;
+      const automatedHarvestStatus = automatedHarvestService.getStatus();
+      const healthy = plantHealthy && workHealthy && harvestHealthy && automatedHarvestStatus.running;
 
       const response = {
         status: healthy ? 'healthy' : 'degraded',
@@ -116,6 +119,7 @@ const registerRoutes = (app: express.Application): void => {
           plant: plantHealthy,
           work: workHealthy,
           harvest: harvestHealthy,
+          automated_harvest: automatedHarvestStatus.running,
           wallet: await stellarWalletManager.getServerHealth()
         },
         uptime: process.uptime()
@@ -134,6 +138,7 @@ const registerRoutes = (app: express.Application): void => {
           plant: false,
           work: false,
           harvest: false,
+          automated_harvest: false,
           wallet: false
         },
         uptime: process.uptime()
@@ -159,7 +164,8 @@ const registerRoutes = (app: express.Application): void => {
         services: {
           plant: plantService.getServiceInfo(),
           work: workService.getServiceInfo(),
-          harvest: harvestService.getServiceInfo()
+          harvest: harvestService.getServiceInfo(),
+          automated_harvest: automatedHarvestStatus
         },
         config: {
           max_farmers_per_request: BACKEND_CONFIG.MAX_FARMERS_PER_REQUEST,
@@ -186,8 +192,66 @@ const registerRoutes = (app: express.Application): void => {
   // PHASE 2: FARMER ONBOARDING ROUTES
   // ======================
 
-  // User registration
+  // User registration (original - has users table dependency)
   app.post('/register', registerUser);
+
+  // Simple farmer registration (farmers table only)
+  app.post('/register-farmer', async (req: Request, res: Response) => {
+    try {
+      const { email, externalWallet } = req.body;
+
+      if (!email || !externalWallet) {
+        return res.status(400).json({
+          error: 'MISSING_FIELDS',
+          message: 'Email and external wallet address are required'
+        });
+      }
+
+      // Generate custodial wallet
+      const walletGeneration = await stellarWalletManager.generateCustodialWallet();
+      
+      if (!walletGeneration.success) {
+        return res.status(500).json({
+          error: 'WALLET_GENERATION_FAILED',
+          message: 'Failed to generate custodial wallet'
+        });
+      }
+
+      // Import farmer queries from original database service
+      const { farmerQueries } = await import('./services/database');
+      
+      // Create farmer directly
+      const farmerId = await farmerQueries.createFarmer(
+        Config.POOLER.ID,
+        walletGeneration.publicKey!,
+        walletGeneration.secretKey!,
+        externalWallet,
+        0.1 // default stake percentage
+      );
+
+      logger.info('Simple farmer registration successful', {
+        farmer_id: farmerId,
+        email,
+        custodial_wallet: walletGeneration.publicKey
+      });
+
+      res.status(201).json({
+        farmerId,
+        email,
+        custodialWallet: walletGeneration.publicKey,
+        status: 'created',
+        message: 'Farmer registration successful. Please fund your custodial wallet with XLM.',
+        createdAt: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Simple farmer registration error', error as Error);
+      res.status(500).json({
+        error: 'REGISTRATION_FAILED',
+        message: 'Failed to register farmer'
+      });
+    }
+  });
 
   // Funding check
   app.post('/check-funding', checkFunding);
@@ -435,6 +499,8 @@ const registerRoutes = (app: express.Application): void => {
 
       // Process work results
       if (workResults && Array.isArray(workResults)) {
+        const successfulFarmers: string[] = [];
+        
         for (const result of workResults) {
           if (result.status === 'success' || result.status === 'recovered') {
             logger.info('Successful work result', {
@@ -443,6 +509,7 @@ const registerRoutes = (app: express.Application): void => {
               zeros: result.zeros,
               work_time_ms: result.workTime
             });
+            successfulFarmers.push(result.farmerId);
           } else if (result.compensationRequired) {
             logger.warn('Failed work requiring compensation', {
               farmer_id: result.farmerId,
@@ -450,6 +517,16 @@ const registerRoutes = (app: express.Application): void => {
               attempts: result.attempts
             });
           }
+        }
+
+        // Log harvest eligibility notification
+        if (successfulFarmers.length > 0) {
+          logger.info('🌾 Farmers now eligible for harvest', {
+            block_index: blockIndex,
+            eligible_farmers: successfulFarmers.length,
+            farmer_ids: successfulFarmers.map(id => id.substring(0, 8) + '...'),
+            note: 'Automated harvest service will process these farmers after their configured intervals'
+          });
         }
       }
 
@@ -649,6 +726,92 @@ const registerRoutes = (app: express.Application): void => {
       });
     }
   });
+
+  // Automated Harvest Service Management
+  app.post('/harvest/start', async (req: Request, res: Response) => {
+    try {
+      automatedHarvestService.start();
+      
+      res.json({
+        success: true,
+        message: 'Automated harvest service started',
+        status: automatedHarvestService.getStatus(),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to start automated harvest service', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to start automated harvest service',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post('/harvest/stop', async (req: Request, res: Response) => {
+    try {
+      automatedHarvestService.stop();
+      
+      res.json({
+        success: true,
+        message: 'Automated harvest service stopped',
+        status: automatedHarvestService.getStatus(),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to stop automated harvest service', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error', 
+        message: 'Failed to stop automated harvest service',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get('/harvest/status', async (req: Request, res: Response) => {
+    try {
+      res.json({
+        service: 'automated-harvest',
+        status: automatedHarvestService.getStatus(),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to get harvest service status', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to get harvest service status', 
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post('/harvest/trigger', async (req: Request, res: Response) => {
+    try {
+      logger.info('Manual harvest trigger requested');
+      
+      const result = await automatedHarvestService.triggerImmediateHarvest();
+      
+      res.json({
+        success: true,
+        message: 'Manual harvest completed',
+        result: {
+          processed_count: result.processedCount,
+          successful_harvests: result.successfulHarvests.length,
+          failed_harvests: result.failedHarvests.length,
+          total_rewards: (Number(result.totalRewards) / 10**7).toFixed(4) + ' KALE',
+          batch_duration_ms: result.batchDurationMs
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Manual harvest trigger failed', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Manual harvest trigger failed',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
 };
 
 // ======================
@@ -674,6 +837,16 @@ export const startServer = async (): Promise<void> => {
         phase: 2,
         features: 'Farmer Onboarding + Pool Contracts'
       });
+
+      // Start automated harvest service after server is running
+      setTimeout(() => {
+        try {
+          automatedHarvestService.start();
+          logger.info('✅ Automated harvest service started successfully');
+        } catch (error) {
+          logger.error('Failed to start automated harvest service', error as Error);
+        }
+      }, 3000); // 3 second delay to ensure everything is initialized
     });
 
   } catch (error) {

@@ -522,6 +522,31 @@ class BlockOperationsQueries {
     
     return result.rows;
   }
+
+  async getRecentBlocksByFarmer(farmerId: string, hoursBack: number = 24): Promise<any[]> {
+    const result = await this.db.query(`
+      SELECT 
+        bo.block_index,
+        bo.work_completed_at as completed_at,
+        bo.successful_plants,
+        bo.failed_plants,
+        bo.successful_works,
+        bo.failed_works
+      FROM block_operations bo
+      WHERE bo.work_completed_at >= NOW() - INTERVAL '${hoursBack} hours'
+        AND bo.successful_plants > 0  
+        AND EXISTS (
+          SELECT 1 FROM plantings p 
+          WHERE p.block_index = bo.block_index 
+            AND p.farmer_id = $1 
+            AND p.status = 'success'
+        )
+      ORDER BY bo.block_index DESC
+      LIMIT 50
+    `, [farmerId]);
+    
+    return result.rows;
+  }
 }
 
 // Plant operations tracking
