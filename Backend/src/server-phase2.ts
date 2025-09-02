@@ -43,12 +43,12 @@ export const createServer = (): express.Application => {
 
   // Request logging middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
-    logger.info('Incoming request', {
+    logger.info(`Incoming request ${JSON.stringify({
       method: req.method,
       url: req.url,
       ip: req.ip,
       user_agent: req.get('User-Agent')
-    });
+    })}`);
     next();
   });
 
@@ -58,12 +58,12 @@ export const createServer = (): express.Application => {
     
     res.on('finish', () => {
       const responseTime = Date.now() - startTime;
-      logger.info('Request completed', {
+      logger.info(`Request completed ${JSON.stringify({
         method: req.method,
         url: req.url,
         status_code: res.statusCode,
         response_time_ms: responseTime
-      });
+      })}`);
     });
     
     next();
@@ -229,11 +229,11 @@ const registerRoutes = (app: express.Application): void => {
         0.1 // default stake percentage
       );
 
-      logger.info('Simple farmer registration successful', {
+      logger.info(`Simple farmer registration successful ${JSON.stringify({
         farmer_id: farmerId,
         email,
         custodial_wallet: walletGeneration.publicKey
-      });
+      })}`);
 
       res.status(201).json({
         farmerId,
@@ -274,15 +274,22 @@ const registerRoutes = (app: express.Application): void => {
   // Block discovery notification from Pooler
   app.post('/pooler/block-discovered', async (req: Request, res: Response) => {
     try {
-      const { event, poolerId, blockIndex, blockData, metadata } = req.body;
+      const { poolerId, blockIndex, blockData, metadata } = req.body;
+      
+      // Extract fields from nested blockData
+      const entropy = blockData?.entropy || '';
+      const blockTimestamp = blockData?.timestamp;
+      const blockAge = blockData?.blockAge || 0;
+      const discoveredAt = metadata?.discoveredAt;
 
-      logger.info('Block discovered notification', {
+      logger.info(`Block discovered notification ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
-        entropy_preview: blockData?.entropy?.substring(0, 16) + '...',
+        entropy_preview: entropy ? entropy.substring(0, 16) + '...' : 'none',
+        block_age: blockAge,
         plantable: blockData?.plantable,
-        block_age: blockData?.blockAge
-      });
+        full_request_body: JSON.stringify(req.body)
+      })}`);
 
       // Import block operations and pool contract queries
       const { blockOperationsQueries, poolContractQueries } = await import('./services/database-phase2');
@@ -295,15 +302,16 @@ const registerRoutes = (app: express.Application): void => {
         blockIndex,
         poolerId,
         {
-          entropy: blockData?.entropy || '',
+          entropy: entropy,
           plantable: blockData?.plantable || false,
-          blockAge: blockData?.blockAge || 0,
+          blockAge: blockAge,
+          timestamp: blockTimestamp,
           minStake: blockData?.min_stake || '0',
-          maxStake: blockData?.max_stake || '0',
-          minZeros: blockData?.min_zeros || 0,
-          maxZeros: blockData?.max_zeros || 0,
+          maxStake: blockData?.max_stake || '250000000',
+          minZeros: blockData?.min_zeros || 5,
+          maxZeros: blockData?.max_zeros || 9,
           discoveredBy: poolerId,
-          discoveredAt: new Date().toISOString(),
+          discoveredAt: discoveredAt || new Date().toISOString(),
           activeFarmersCount: activeFarmers.length
         }
       );
@@ -311,13 +319,14 @@ const registerRoutes = (app: express.Application): void => {
       // 3. Handle planting logic based on block age and farmer availability
       let plantResults = null;
       if (activeFarmers.length > 0) {
-        if (blockData?.plantable) {
+        const isPlantable = blockAge >= 30;
+        if (isPlantable) {
           // Block is ready for immediate planting
-          logger.info('Triggering immediate plant operations for plantable block', {
+          logger.info(`Triggering immediate plant operations for plantable block ${JSON.stringify({
             block_index: blockIndex,
             active_farmers: activeFarmers.length,
-            block_age: blockData.blockAge
-          });
+            block_age: blockAge
+          })}`);
           
           // TODO: Trigger parallel plant operations via Launchtube
           plantResults = {
@@ -328,33 +337,45 @@ const registerRoutes = (app: express.Application): void => {
           };
         } else {
           // Block is too young, schedule for later planting
-          const timeToWait = Math.max(0, 30 - (blockData?.blockAge || 0));
+          const safeBlockAge = typeof blockAge === 'number' ? blockAge : 0;
+          const timeToWait = Math.max(0, 30 - safeBlockAge);
           
-          logger.info('Block too young, scheduling for delayed planting', {
+          logger.info(`Block too young, scheduling for delayed planting ${JSON.stringify({
             block_index: blockIndex,
             active_farmers: activeFarmers.length,
-            current_age: blockData?.blockAge || 0,
+            current_age: blockAge,
             time_to_wait: timeToWait
-          });
+          })}`);
           
           // Schedule planting when block reaches 30 seconds
           setTimeout(async () => {
             try {
-              logger.info('Executing scheduled plant operations', {
+              logger.info(`Executing scheduled plant operations ${JSON.stringify({
                 block_index: blockIndex,
                 scheduled_delay: timeToWait
-              });
+              })}`);
               
               // Re-check active farmers (they might have changed)
               const currentActiveFarmers = await poolContractQueries.getActiveFarmersForPlanting();
               
-              // Get the original block data from the discovery
-              const originalBlockData = {
-                entropy: blockData?.entropy,
-                timestamp: blockData?.timestamp,
-                blockAge: blockData?.blockAge,
-                plantable: blockData?.plantable
-              };
+              // Get the stored block data from database
+              const storedBlockData = await blockOperationsQueries.getBlockData(blockIndex);
+              
+              if (!storedBlockData || !storedBlockData.entropy) {
+                logger.error(`No block data found in database for scheduled planting ${JSON.stringify({
+                  block_index: blockIndex,
+                  has_stored_data: !!storedBlockData
+                })}`);
+                return;
+              }
+              
+              logger.debug(`Retrieved block data for scheduled planting ${JSON.stringify({
+                block_index: blockIndex,
+                has_entropy: !!storedBlockData.entropy,
+                entropy_length: storedBlockData.entropy?.length || 0,
+                entropy_preview: storedBlockData.entropy ? storedBlockData.entropy.substring(0, 16) + '...' : 'none',
+                stored_block_data: JSON.stringify(storedBlockData)
+              })}`);
               
               if (currentActiveFarmers.length > 0) {
                 // Execute parallel plant operations via Launchtube
@@ -407,20 +428,20 @@ const registerRoutes = (app: express.Application): void => {
                   details: plantingResults.details,
                   // Add planted farmers for work coordination
                   plantedFarmers: successfullyPlantedFarmers,
-                  blockData: originalBlockData
+                  blockData: storedBlockData
                 });
                 
-                logger.info('Scheduled plant operations completed with Pooler notification', {
+                logger.info(`Scheduled plant operations completed with Pooler notification ${JSON.stringify({
                   block_index: blockIndex,
                   farmers_planted: currentActiveFarmers.length,
                   successful_plants: plantingResults.successCount,
                   failed_plants: plantingResults.failCount,
                   duration_ms: plantDuration
-                });
+                })}`);
               } else {
-                logger.warn('No active farmers available for scheduled planting', {
+                logger.warn(`No active farmers available for scheduled planting ${JSON.stringify({
                   block_index: blockIndex
-                });
+                })}`);
               }
             } catch (error) {
               logger.error('Scheduled planting failed', error as Error, {
@@ -438,11 +459,11 @@ const registerRoutes = (app: express.Application): void => {
           };
         }
       } else {
-        logger.info('No active farmers available for planting', {
+        logger.info(`No active farmers available for planting ${JSON.stringify({
           block_index: blockIndex,
-          plantable: blockData?.plantable,
+          plantable: blockAge >= 30,
           reason: 'no_active_farmers'
-        });
+        })}`);
         
         plantResults = {
           status: 'no_farmers',
@@ -488,45 +509,108 @@ const registerRoutes = (app: express.Application): void => {
     try {
       const { blockIndex, poolerId, workResults, summary } = req.body;
       
-      logger.info('Work completion notification received from Pooler', {
+      // Import required services
+      const { blockOperationsQueries } = await import('./services/database-phase2');
+      const { db } = await import('./services/database');
+      
+      logger.info(`Work completion notification received from Pooler ${JSON.stringify({
         pooler_id: poolerId,
         block_index: blockIndex,
         total_farmers: summary?.totalFarmers || 0,
         successful_work: summary?.successfulWork || 0,
         failed_work: summary?.failedWork || 0,
-        total_time_ms: summary?.totalWorkTime || 0
-      });
+        total_time_ms: summary?.totalWorkTime || 0,
+        work_results: JSON.stringify(workResults),
+        summary: JSON.stringify(summary)
+      })}`);
 
       // Process work results
       if (workResults && Array.isArray(workResults)) {
         const successfulFarmers: string[] = [];
+        let successfulWorksCount = 0;
+        let failedWorksCount = 0;
         
+        // Save each work result to database
         for (const result of workResults) {
-          if (result.status === 'success' || result.status === 'recovered') {
-            logger.info('Successful work result', {
+          try {
+            // Insert work record into works table
+            await db.query(`
+              INSERT INTO works (
+                block_index, farmer_id, pooler_id, custodial_wallet, 
+                nonce, hash, zeros, gap, transaction_hash, 
+                status, error_message, compensation_required, worked_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+            `, [
+              blockIndex,
+              result.farmerId, 
+              poolerId,
+              result.custodialWallet || '',
+              result.nonce || '',
+              result.hash || '',
+              result.zeros || 0,
+              result.gap || 0,
+              result.transactionHash || '',
+              result.status,
+              result.error || null,
+              result.compensationRequired || false
+            ]);
+
+            if (result.status === 'success' || result.status === 'recovered') {
+              logger.info(`Successful work result saved to database ${JSON.stringify({
+                farmer_id: result.farmerId,
+                nonce: result.nonce,
+                zeros: result.zeros,
+                work_time_ms: result.workTime
+              })}`);
+              successfulFarmers.push(result.farmerId);
+              successfulWorksCount++;
+            } else {
+              failedWorksCount++;
+              if (result.compensationRequired) {
+                logger.warn(`Failed work requiring compensation saved to database ${JSON.stringify({
+                  farmer_id: result.farmerId,
+                  error: result.error,
+                  attempts: result.attempts
+                })}`);
+              }
+            }
+          } catch (dbError) {
+            logger.error('Failed to save work result to database', dbError as Error, {
               farmer_id: result.farmerId,
-              nonce: result.nonce,
-              zeros: result.zeros,
-              work_time_ms: result.workTime
+              block_index: blockIndex
             });
-            successfulFarmers.push(result.farmerId);
-          } else if (result.compensationRequired) {
-            logger.warn('Failed work requiring compensation', {
-              farmer_id: result.farmerId,
-              error: result.error,
-              attempts: result.attempts
-            });
+            failedWorksCount++;
           }
+        }
+
+        // Update block operation with work completion
+        try {
+          await blockOperationsQueries.updateBlockOperationWorkCompletion(blockIndex, {
+            successfulWorks: successfulWorksCount,
+            totalWorks: workResults.length,
+            workCompletedAt: new Date()
+          });
+          
+          logger.info(`Updated block operation with work completion ${JSON.stringify({
+            block_index: blockIndex,
+            successful_works: successfulWorksCount,
+            failed_works: failedWorksCount,
+            total_works: workResults.length
+          })}`);
+        } catch (updateError) {
+          logger.error('Failed to update block operation with work completion', updateError as Error, {
+            block_index: blockIndex
+          });
         }
 
         // Log harvest eligibility notification
         if (successfulFarmers.length > 0) {
-          logger.info('🌾 Farmers now eligible for harvest', {
+          logger.info(`🌾 Farmers now eligible for harvest ${JSON.stringify({
             block_index: blockIndex,
             eligible_farmers: successfulFarmers.length,
             farmer_ids: successfulFarmers.map(id => id.substring(0, 8) + '...'),
             note: 'Automated harvest service will process these farmers after their configured intervals'
-          });
+          })}`);
         }
       }
 
@@ -558,11 +642,11 @@ const registerRoutes = (app: express.Application): void => {
     try {
       const { blockIndex, poolerId, maxFarmersCapacity } = req.body;
 
-      logger.info('Plant request received', {
+      logger.info(`Plant request received ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
         max_farmers_capacity: maxFarmersCapacity
-      });
+      })}`);
 
       // Validate request
       if (typeof blockIndex !== 'number' || !poolerId || typeof maxFarmersCapacity !== 'number') {
@@ -588,13 +672,13 @@ const registerRoutes = (app: express.Application): void => {
         timestamp: new Date().toISOString()
       };
 
-      logger.info('Plant request completed', {
+      logger.info(`Plant request completed ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
         successful_plants: result.successfulPlants.length,
         failed_plants: result.failedPlants.length,
         total_staked: result.totalStaked
-      });
+      })}`);
 
       res.status(200).json(response);
 
@@ -616,11 +700,11 @@ const registerRoutes = (app: express.Application): void => {
     try {
       const { blockIndex, poolerId, submissions } = req.body;
 
-      logger.info('Work request received', {
+      logger.info(`Work request received ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
         submission_count: submissions?.length || 0
-      });
+      })}`);
 
       // Validate request
       if (typeof blockIndex !== 'number' || !poolerId || !Array.isArray(submissions)) {
@@ -647,13 +731,13 @@ const registerRoutes = (app: express.Application): void => {
         timestamp: new Date().toISOString()
       };
 
-      logger.info('Work request completed', {
+      logger.info(`Work request completed ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
         valid_nonces: result.validNonces.length,
         invalid_nonces: result.invalidNonces.length,
         submitted_work: result.submittedWork.length
-      });
+      })}`);
 
       res.status(200).json(response);
 
@@ -675,10 +759,10 @@ const registerRoutes = (app: express.Application): void => {
     try {
       const { blockIndex, poolerId } = req.body;
 
-      logger.info('Harvest request received', {
+      logger.info(`Harvest request received ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId
-      });
+      })}`);
 
       // Validate request
       if (typeof blockIndex !== 'number' || !poolerId) {
@@ -704,13 +788,13 @@ const registerRoutes = (app: express.Application): void => {
         timestamp: new Date().toISOString()
       };
 
-      logger.info('Harvest request completed', {
+      logger.info(`Harvest request completed ${JSON.stringify({
         block_index: blockIndex,
         pooler_id: poolerId,
         successful_harvests: result.successfulHarvests.length,
         failed_harvests: result.failedHarvests.length,
         total_rewards: result.totalRewards
-      });
+      })}`);
 
       res.status(200).json(response);
 
@@ -812,6 +896,80 @@ const registerRoutes = (app: express.Application): void => {
       });
     }
   });
+
+  // Force harvest - bypasses all delays for testing
+  app.post('/harvest/force', async (req: Request, res: Response) => {
+    try {
+      logger.info('🚨 FORCE HARVEST triggered - bypassing all delays for testing');
+      
+      // Use the existing automated harvest service force trigger
+      const harvestResult = await automatedHarvestService.triggerImmediateHarvest();
+      
+      res.json({
+        success: true,
+        message: 'Force harvest completed',
+        result: {
+          processed_count: harvestResult.processedCount,
+          successful_harvests: harvestResult.successfulHarvests.length,
+          failed_harvests: harvestResult.failedHarvests.length,
+          total_rewards: (Number(harvestResult.totalRewards) / 10**7).toFixed(4) + ' KALE',
+          batch_duration_ms: harvestResult.batchDurationMs
+        },
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Force harvest failed', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Force harvest failed',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Test harvest endpoint for debugging
+  app.post('/test-direct-harvest', async (req: Request, res: Response) => {
+    try {
+      logger.info(`Direct harvest test triggered ${JSON.stringify({ body: req.body })}`);
+      
+      const { farmerPublicKey, farmerSecretKey, blockIndex } = req.body;
+      
+      if (!farmerPublicKey || !farmerSecretKey || !blockIndex) {
+        return res.status(400).json({
+          error: 'Missing required fields: farmerPublicKey, farmerSecretKey, blockIndex'
+        });
+      }
+
+      // Import LaunchtubeService
+      const { launchtubeService } = await import('./services/launchtube-service');
+      
+      // Attempt direct harvest
+      const harvestResult = await launchtubeService.harvest({
+        farmerPublicKey,
+        farmerSecretKey,
+        blockIndex: parseInt(blockIndex)
+      });
+
+      logger.info(`Direct harvest result ${JSON.stringify({ result: harvestResult })}`);
+
+      res.json({
+        success: true,
+        message: 'Direct harvest test completed',
+        result: harvestResult,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Direct harvest test failed', error as Error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Direct harvest test failed',
+        details: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
 };
 
 // ======================
@@ -830,13 +988,13 @@ export const startServer = async (): Promise<void> => {
     const host = Config.BACKEND.HOST;
     
     app.listen(port, host, () => {
-      logger.info('Backend API server started', {
+      logger.info(`Backend API server started ${JSON.stringify({
         port,
         host,
         environment: Config.NODE_ENV,
         phase: 2,
         features: 'Farmer Onboarding + Pool Contracts'
-      });
+      })}`);
 
       // Start automated harvest service after server is running
       setTimeout(() => {
@@ -867,10 +1025,10 @@ async function executePlantOperations(activeFarmers: any[], blockIndex: number):
   failCount: number;
   details: any[];
 }> {
-  logger.info('Executing parallel plant operations', {
+  logger.info(`Executing parallel plant operations ${JSON.stringify({
     block_index: blockIndex,
     farmer_count: activeFarmers.length
-  });
+  })}`);
 
   const plantPromises = activeFarmers.map(async (farmer) => {
     try {
@@ -930,12 +1088,12 @@ async function executePlantOperations(activeFarmers: any[], blockIndex: number):
   const successCount = results.filter(r => r.success).length;
   const failCount = results.length - successCount;
 
-  logger.info('Parallel plant operations completed', {
+  logger.info(`Parallel plant operations completed ${JSON.stringify({
     block_index: blockIndex,
     total_farmers: results.length,
     successful: successCount,
     failed: failCount
-  });
+  })}`);
 
   return {
     successCount,
@@ -953,7 +1111,7 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
     const { poolerQueriesPhase2 } = await import('./services/database-phase2');
     const pooler = await poolerQueriesPhase2.getPoolerWithSettings(poolerId);
     if (!pooler || !pooler.api_endpoint) {
-      logger.warn('Pooler endpoint not found, skipping notification', { pooler_id: poolerId });
+      logger.warn(`Pooler endpoint not found, skipping notification ${JSON.stringify({ pooler_id: poolerId })}`);
       return;
     }
 
@@ -975,14 +1133,14 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
       timestamp: new Date().toISOString()
     };
 
-    logger.info('Notifying Pooler about planting completion', {
+    logger.info(`Notifying Pooler about planting completion ${JSON.stringify({
       pooler_id: poolerId,
       pooler_endpoint: pooler.api_endpoint,
       block_index: plantingData.blockIndex,
       successful_plants: plantingData.successfulPlants,
       planted_farmers_count: plantingData.plantedFarmers?.length || 0,
       has_block_data: !!(plantingData.blockData?.entropy)
-    });
+    })}`);
 
     const response = await fetch(`${pooler.api_endpoint}/backend/planting-status`, {
       method: 'POST',
@@ -996,17 +1154,17 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
 
     if (response.ok) {
       const result = await response.json();
-      logger.info('Pooler notification successful', {
+      logger.info(`Pooler notification successful ${JSON.stringify({
         pooler_id: poolerId,
         response: result
-      });
+      })}`);
     } else {
       const errorText = await response.text();
-      logger.warn('Pooler notification failed', {
+      logger.warn(`Pooler notification failed ${JSON.stringify({
         pooler_id: poolerId,
         status: response.status,
         error: errorText
-      });
+      })}`);
     }
 
   } catch (error) {

@@ -204,7 +204,10 @@ class PoolerService {
             });
 
           } catch (error) {
-            this.logError('Failed to schedule work execution', error);
+            this.logError('Failed to schedule work execution', error, {
+              block_index: actualBlockIndex,
+              farmer_count: actualPlantedFarmers.length
+            });
           }
 
         } else {
@@ -690,16 +693,14 @@ class PoolerService {
    * Logging helper
    */
   private log(message: string, data?: any): void {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [PoolerService] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+    logger.info(message, data);
   }
 
   /**
    * Error logging helper
    */
-  private logError(message: string, error: any): void {
-    const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] [PoolerService] ❌ ${message}:`, error);
+  private logError(message: string, error: any, data?: any): void {
+    logger.error(message, error as Error, data);
   }
 }
 

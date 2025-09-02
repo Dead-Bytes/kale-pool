@@ -338,34 +338,42 @@ export class LaunchtubeService {
     try {
       const { farmerPublicKey, farmerSecretKey, blockIndex } = request;
       
+      const blockIndexNumber = parseInt(blockIndex.toString(), 10);
+      
       logger.info('Starting harvest operation', {
         farmer: farmerPublicKey,
-        block_index: blockIndex
+        block_index: blockIndex,
+        block_index_type: typeof blockIndex,
+        block_index_converted: blockIndexNumber,
+        block_index_converted_type: typeof blockIndexNumber
       });
 
       // Use SINGLE GLOBAL contract client (EXACT reference pattern)
       const transaction = await this.contract.harvest({
         farmer: farmerPublicKey,
-        index: blockIndex,
+        index: blockIndexNumber, // Ensure blockIndex is properly converted to number for u32 type
       });
 
-      // Check for simulation errors
+      // Check for simulation errors (same as parallel-harvester)
       if (Api.isSimulationError(transaction.simulation!)) {
         const errorMessage = transaction.simulation.error;
         
-        if (errorMessage.includes('Error(Contract, #14)')) {
-          logger.info('Harvest not ready yet', { farmer: farmerPublicKey, block_index: blockIndex });
+        // Handle known harvest errors (same as parallel-harvester)
+        if (
+          errorMessage.includes('Error(Contract, #9)') ||  // PailMissing
+          errorMessage.includes('Error(Contract, #10)') || // WorkMissing
+          errorMessage.includes('Error(Contract, #11)') || // BlockMissing
+          errorMessage.includes('Error(Contract, #14)')    // HarvestNotReady
+        ) {
+          logger.info('Block not ready for harvest', { 
+            farmer: farmerPublicKey, 
+            block_index: blockIndex,
+            error: errorMessage 
+          });
           return {
             success: false,
-            error: 'Harvest not ready - block may not be complete yet',
-            details: { message: 'HarvestNotReady' }
-          };
-        } else if (errorMessage.includes('Error(Contract, #10)')) {
-          logger.info('Work missing for harvest', { farmer: farmerPublicKey, block_index: blockIndex });
-          return {
-            success: false,
-            error: 'Work missing - must complete work before harvest',
-            details: { message: 'WorkMissing' }
+            error: `Block ${blockIndex} not ready for harvest: ${errorMessage}`,
+            details: { simulation_error: errorMessage }
           };
         } else {
           logger.error('Harvest simulation error', undefined, { error: errorMessage });
@@ -375,30 +383,74 @@ export class LaunchtubeService {
             details: { simulation_error: errorMessage }
           };
         }
+      } else {
+        // Simulation successful - proceed with harvest
+        // Send the transaction directly using Launchtube (same as reference send() function)
+        try {
+          const data = new FormData();
+          
+          // Convert transaction to XDR (same as reference send function)
+          const xdr = transaction.built!.toXDR();
+          data.set('xdr', xdr);
+          
+          // Submit directly to Launchtube
+          const response = await fetch(this.launchtubeUrl, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${this.launchtubeJwt}`,
+              'X-Client-Name': 'kale-pool-backend',
+              'X-Client-Version': '1.0.0'
+            },
+            body: data
+          });
+          
+          if (response.ok) {
+            const responseData = await response.json();
+            const reward = transaction.simulation?.result?.retval || '0';
+            
+            logger.info('Harvest operation successful', {
+              farmer: farmerPublicKey,
+              transaction_hash: responseData.hash || 'unknown',
+              block_index: blockIndex,
+              reward: reward.toString()
+            });
+            
+            return {
+              success: true,
+              transactionHash: responseData.hash || 'unknown',
+              details: {
+                reward: reward.toString(),
+                response: responseData
+              }
+            };
+          } else {
+            const errorText = await response.text();
+            logger.error('Launchtube submission failed', undefined, {
+              farmer: farmerPublicKey,
+              block_index: blockIndex,
+              status: response.status,
+              error: errorText
+            });
+            
+            return {
+              success: false,
+              error: `Launchtube submission failed: ${errorText}`,
+              details: { status: response.status, error: errorText }
+            };
+          }
+        } catch (submitError) {
+          logger.error('Harvest submission exception', submitError as Error, {
+            farmer: farmerPublicKey,
+            block_index: blockIndex
+          });
+          
+          return {
+            success: false,
+            error: `Submission exception: ${(submitError as Error).message}`,
+            details: submitError
+          };
+        }
       }
-
-      // Use cached signer (like reference uses single global signer)
-      const farmerSigner = this.getFarmerSigner(farmerSecretKey);
-
-      await transaction.signAuthEntries({
-        address: farmerPublicKey,
-        signAuthEntry: farmerSigner.signAuthEntry,
-      });
-
-      // Submit via Launchtube (EXACT reference pattern)
-      const result = await this.submitTransaction(transaction);
-      
-      if (result.success) {
-        const reward = transaction.simulation?.result?.retval;
-        logger.info('Harvest operation successful', {
-          farmer: farmerPublicKey,
-          transaction_hash: result.transactionHash,
-          block_index: blockIndex,
-          reward: reward ? reward.toString() : 'unknown'
-        });
-      }
-
-      return result;
 
     } catch (error) {
       logger.error('Harvest operation failed', error as Error, {

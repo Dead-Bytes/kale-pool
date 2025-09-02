@@ -5,6 +5,7 @@ import { LaunchtubeService } from './launchtube-service';
 import { blockOperationsQueries } from './database-phase2';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
 import Config from '../../../Shared/config';
+import { formatISTTime, getISTDate } from '../../../Shared/utils/timing';
 
 interface HarvestCandidate {
   farmerId: string;
@@ -39,15 +40,15 @@ export class AutomatedHarvestService {
   private launchtubeService: LaunchtubeService;
   private readonly CHECK_INTERVAL_MS = 30000; // Check every 30 seconds
   private readonly MAX_PARALLEL_HARVESTS = 10;
-  private readonly DEFAULT_HARVEST_DELAY = 300; // 5 minutes after work completion
+  private readonly DEFAULT_HARVEST_DELAY = 30; // 30 seconds after work completion
 
   constructor() {
     this.launchtubeService = new LaunchtubeService();
-    logger.info('AutomatedHarvestService initialized', {
+    logger.info(`AutomatedHarvestService initialized ${JSON.stringify({
       check_interval_ms: this.CHECK_INTERVAL_MS,
       max_parallel_harvests: this.MAX_PARALLEL_HARVESTS,
       default_harvest_delay: this.DEFAULT_HARVEST_DELAY
-    });
+    })}`);
   }
 
   /**
@@ -61,9 +62,9 @@ export class AutomatedHarvestService {
 
     this.isRunning = true;
     
-    logger.info('🚜 Starting automated harvest service', {
+    logger.info(`🚜 Starting automated harvest service ${JSON.stringify({
       check_interval_ms: this.CHECK_INTERVAL_MS
-    });
+    })}`);
 
     // Start the harvest check loop
     this.harvestInterval = setInterval(async () => {
@@ -112,30 +113,35 @@ export class AutomatedHarvestService {
         return;
       }
 
-      logger.info('🌾 Found farmers ready for harvest', {
+      logger.info(`🌾 Found farmers ready for harvest ${JSON.stringify({
         candidate_count: harvestCandidates.length,
-        blocks: [...new Set(harvestCandidates.map(c => c.blockIndex))].sort()
-      });
-
+        blocks: [...new Set(harvestCandidates.map(c => c.blockIndex))].sort(),
+        current_time_ist: formatISTTime(),
+        farmers_details: harvestCandidates.map(c => ({
+          farmer_id: c.farmerId.substring(0, 8) + '...',
+          block_index: c.blockIndex,
+          work_completed_at_ist: formatISTTime(c.lastWorkTimestamp),
+          ready_since_minutes: Math.floor((Date.now() - c.lastWorkTimestamp.getTime()) / 60000)
+        }))})}`);
       // Execute harvest batch
       const batchResult = await this.executeHarvestBatch(harvestCandidates);
 
       // Log results
       if (batchResult.successfulHarvests.length > 0) {
-        logger.info('✅ Harvest cycle completed successfully', {
+        logger.info(`✅ Harvest cycle completed successfully ${JSON.stringify({
           processed: batchResult.processedCount,
           successful: batchResult.successfulHarvests.length,
           failed: batchResult.failedHarvests.length,
           total_rewards: (Number(batchResult.totalRewards) / 10**7).toFixed(4) + ' KALE',
           cycle_duration_ms: Date.now() - cycleStartTime,
           batch_duration_ms: batchResult.batchDurationMs
-        });
+        })}`);
       } else if (batchResult.failedHarvests.length > 0) {
-        logger.warn('⚠️ Harvest cycle completed with failures', {
+        logger.warn(`⚠️ Harvest cycle completed with failures ${JSON.stringify({
           processed: batchResult.processedCount,
           failed: batchResult.failedHarvests.length,
           cycle_duration_ms: Date.now() - cycleStartTime
-        });
+        })}`);
       }
 
     } catch (error) {
@@ -199,14 +205,13 @@ export class AutomatedHarvestService {
         ) === index;
       });
 
-      logger.debug('Found harvest candidates', {
+      logger.debug(`Found harvest candidates ${JSON.stringify({
         total_candidates: uniqueCandidates.length,
         farmers: uniqueCandidates.map(c => ({ 
           farmer_id: c.farmerId.substring(0, 8) + '...',
           block_index: c.blockIndex,
           ready_since: Math.floor((currentTime.getTime() - c.lastWorkTimestamp.getTime()) / 1000) + 's ago'
-        }))
-      });
+        }))})}`);
 
       return uniqueCandidates;
 
@@ -249,19 +254,19 @@ export class AutomatedHarvestService {
     const batchStartTime = Date.now();
     const results: HarvestResult[] = [];
 
-    logger.info('🚀 Starting harvest batch execution', {
+    logger.info(`🚀 Starting harvest batch execution ${JSON.stringify({
       candidate_count: candidates.length,
       max_parallel: this.MAX_PARALLEL_HARVESTS
-    });
+    })}`);
 
     // Process candidates in parallel batches
     for (let i = 0; i < candidates.length; i += this.MAX_PARALLEL_HARVESTS) {
       const batch = candidates.slice(i, i + this.MAX_PARALLEL_HARVESTS);
       
-      logger.debug(`Processing harvest batch ${Math.floor(i / this.MAX_PARALLEL_HARVESTS) + 1}`, {
-        batch_size: batch.size,
+      logger.debug(`Processing harvest batch ${Math.floor(i / this.MAX_PARALLEL_HARVESTS) + 1} ${JSON.stringify({
+        batch_size: batch.length,
         batch_farmer_ids: batch.map(c => c.farmerId.substring(0, 8) + '...')
-      });
+      })}`);
 
       const batchPromises = batch.map(candidate => this.executeHarvestForFarmer(candidate));
       const batchResults = await Promise.allSettled(batchPromises);
@@ -316,10 +321,10 @@ export class AutomatedHarvestService {
     const startTime = Date.now();
 
     try {
-      logger.debug('🌾 Executing harvest for farmer', {
+      logger.debug(`🌾 Executing harvest for farmer ${JSON.stringify({
         farmer_id: candidate.farmerId.substring(0, 8) + '...',
         block_index: candidate.blockIndex
-      });
+      })}`);
 
       // Execute harvest via LaunchtubeService
       const harvestResult = await this.launchtubeService.harvest({
@@ -334,13 +339,13 @@ export class AutomatedHarvestService {
         // Extract reward from transaction result if available
         const reward = harvestResult.details?.reward || '0';
         
-        logger.debug('✅ Harvest successful', {
+        logger.debug(`✅ Harvest successful ${JSON.stringify({
           farmer_id: candidate.farmerId.substring(0, 8) + '...',
           block_index: candidate.blockIndex,
           transaction_hash: harvestResult.transactionHash,
           reward: reward.toString(),
           processing_time_ms: processingTimeMs
-        });
+        })}`);
 
         return {
           farmerId: candidate.farmerId,
@@ -352,12 +357,12 @@ export class AutomatedHarvestService {
         };
 
       } else {
-        logger.warn('❌ Harvest failed', {
+        logger.warn(`❌ Harvest failed ${JSON.stringify({
           farmer_id: candidate.farmerId.substring(0, 8) + '...',
           block_index: candidate.blockIndex,
           error: harvestResult.error,
           processing_time_ms: processingTimeMs
-        });
+        })}`);
 
         return {
           farmerId: candidate.farmerId,

@@ -22,7 +22,7 @@ function archiveOldLogs() {
 
   // Check if there are logs to archive
   const logFiles = ["error.log", "info.log", "combined.log"];
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const timestamp = getISTTimestamp().replace(/[:.]/g, "-");
 
   for (const logFile of logFiles) {
     const logPath = path.join(logsDir, logFile);
@@ -43,6 +43,13 @@ function archiveOldLogs() {
 
 // Archive logs on server start
 archiveOldLogs();
+
+// Helper function to get IST timestamp
+function getISTTimestamp(): string {
+  const now = new Date();
+  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Add 5.5 hours for IST
+  return istTime.toISOString().replace('Z', '+05:30');
+}
 
 // Helper function to convert JS path to TS path
 function convertJsToTsPath(jsPath: string): string {
@@ -159,7 +166,7 @@ class KaleLogger {
     const stackInfo = getCallerInfo();
 
     const entry: UnifiedLogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: getISTTimestamp(),
       level: level,
       message: message,
       source: this.serviceName.includes('Pooler') ? 'pooler' : 'backend',

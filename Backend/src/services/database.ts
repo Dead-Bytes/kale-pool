@@ -577,11 +577,73 @@ export const poolerQueries = new PoolerQueries(db);
 export const blockOperationQueries = new BlockOperationQueries(db);
 export const plantQueries = new PlantQueries(db);
 export const workQueries = new WorkQueries(db);
+import fs from 'fs';
+import path from 'path';
+
 export const harvestQueries = new HarvestQueries(db);
 
 // Database initialization function
 export const initializeDatabase = async (): Promise<void> => {
   await db.connect();
+  
+  // Run database migrations
+  await runMigrations();
+};
+
+/**
+ * Run database migrations automatically on startup
+ */
+const runMigrations = async (): Promise<void> => {
+  try {
+    logger.info('Running database migrations...');
+    
+    // Path to migrations directory
+    const migrationsDir = path.join(__dirname, '../../Shared/database/migrations');
+    
+    // Check if migrations directory exists
+    if (!fs.existsSync(migrationsDir)) {
+      logger.info('No migrations directory found, skipping migrations');
+      return;
+    }
+    
+    // Get all .sql migration files
+    const migrationFiles = fs.readdirSync(migrationsDir)
+      .filter(file => file.endsWith('.sql'))
+      .sort(); // Run migrations in alphabetical order
+    
+    if (migrationFiles.length === 0) {
+      logger.info('No migration files found');
+      return;
+    }
+    
+    // Run each migration
+    for (const migrationFile of migrationFiles) {
+      const migrationPath = path.join(migrationsDir, migrationFile);
+      const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+      
+      logger.info(`Running migration: ${migrationFile}`);
+      
+      try {
+        // Execute the migration SQL
+        await db.query(migrationSQL);
+        logger.info(`Migration completed: ${migrationFile}`);
+      } catch (error) {
+        // If migration fails, check if it's because the column already exists
+        const errorMessage = (error as Error).message;
+        if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+          logger.info(`Migration skipped (already applied): ${migrationFile}`);
+        } else {
+          logger.error(`Migration failed: ${migrationFile}`, error as Error);
+          throw error;
+        }
+      }
+    }
+    
+    logger.info('Database migrations completed successfully');
+  } catch (error) {
+    logger.error('Failed to run database migrations', error as Error);
+    throw error;
+  }
 };
 
 export { db };

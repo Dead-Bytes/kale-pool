@@ -7,6 +7,7 @@ import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { blockMonitorLogger as logger } from '../../../Shared/utils/logger';
 import Config from '../../../Shared/config';
+import { calculateTimingPredictions, formatISTTime, getISTDate } from '../../../Shared/utils/timing';
 import type { 
   ContractData, 
   KaleBlock, 
@@ -182,6 +183,28 @@ class BlockMonitor {
       : now;
     const blockAge = Math.floor((now.getTime() - blockTimestamp.getTime()) / 1000);
     const entropy = contractData.block?.entropy?.toString('hex') || Buffer.alloc(32).toString('hex');
+    
+    // Calculate timing predictions for plant/work/harvest cycle
+    const timingPredictions = calculateTimingPredictions(
+      Number(contractData.block?.timestamp || Math.floor(now.getTime() / 1000)),
+      30,  // planting delay: 30 seconds
+      150, // work delay: 2.5 minutes after planting
+      30   // harvest delay: 30 seconds after work completion
+    );
+    
+    // Log timing predictions in IST
+    this.log(chalk.cyan.bold('📅 TIMING PREDICTIONS (IST):'), {
+      current_time: timingPredictions.currentTimeIST,
+      block_discovered: timingPredictions.blockDiscoveredTimeIST,
+      planting_scheduled: timingPredictions.plantingTimeIST,
+      work_scheduled: timingPredictions.workTimeIST,
+      harvest_eligible: timingPredictions.harvestTimeIST,
+      cycle_details: {
+        planting_in: '30 seconds from block discovery',
+        work_in: '2.5 minutes after planting starts',
+        harvest_in: '30 seconds after work completion'
+      }
+    });
     
     // Update state
     this.state.currentBlockIndex = newIndex;

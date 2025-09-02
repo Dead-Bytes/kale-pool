@@ -3,9 +3,10 @@
 
 import { Keypair } from '@stellar/stellar-sdk';
 import { spawn, type Subprocess } from 'bun';
-import type { Buffer } from 'buffer';
 import Config from '../../../Shared/config';
 import { blockMonitorLogger as logger } from '../../../Shared/utils/logger';
+import { WorkSubmissionService, type WorkSubmissionRequest, type WorkSubmissionResult } from './work-submission-service';
+import { formatISTTime, getISTDate } from '../../../Shared/utils/timing';
 
 // Work execution interfaces
 export interface WorkRequest {
@@ -49,7 +50,7 @@ interface WorkState {
 }
 
 export class WorkManager {
-  private readonly WORK_DELAY_SECONDS = 30; // Wait time after planting (testing)
+  private readonly WORK_DELAY_SECONDS = 150; // Wait time after planting (testing)
   private readonly MAX_RECOVERY_ATTEMPTS = 3;
   private readonly WORK_TIMEOUT_MS = 300000; // 5 minutes per work attempt
   private readonly NONCE_COUNT = 10000000; // Default nonce count
@@ -60,12 +61,16 @@ export class WorkManager {
     attempts: 0
   };
 
+  private workSubmissionService: WorkSubmissionService;
+
   constructor() {
-    logger.info('WorkManager initialized', {
+    this.workSubmissionService = new WorkSubmissionService();
+    
+    logger.info(`WorkManager initialized ${JSON.stringify({
       work_delay_seconds: this.WORK_DELAY_SECONDS,
       max_recovery_attempts: this.MAX_RECOVERY_ATTEMPTS,
       work_timeout_ms: this.WORK_TIMEOUT_MS
-    });
+    })}`);
   }
 
   /**
@@ -83,13 +88,20 @@ export class WorkManager {
       const targetTimeMs = blockTimeMs + this.WORK_DELAY_SECONDS * 1000;
       const waitTimeMs = Math.max(0, targetTimeMs - currentTimeMs);
 
-      logger.info('Work scheduled for planted farmers', {
+      const currentTimeIST = formatISTTime(new Date(currentTimeMs));
+      const targetTimeIST = formatISTTime(new Date(targetTimeMs));
+      const harvestTimeMs = targetTimeMs + 30000; // 30 seconds after work completion
+      const harvestTimeIST = formatISTTime(new Date(harvestTimeMs));
+      
+      logger.info(`⏰ Work scheduled for planted farmers (IST timing) ${JSON.stringify({
         block_index: blockIndex,
         farmer_count: workRequests.length,
-        current_time: new Date(currentTimeMs).toISOString(),
-        target_time: new Date(targetTimeMs).toISOString(),
-        wait_time_ms: waitTimeMs
-      });
+        current_time_ist: currentTimeIST,
+        work_starts_at_ist: targetTimeIST,
+        harvest_eligible_at_ist: harvestTimeIST,
+        wait_time_minutes: Math.round(waitTimeMs / 60000 * 10) / 10,
+        work_delay_seconds: this.WORK_DELAY_SECONDS
+      })}`);
 
       setTimeout(async () => {
         try {
@@ -113,11 +125,11 @@ export class WorkManager {
     const batchStartTime = Date.now();
     const workResults: WorkResult[] = [];
 
-    logger.info('Starting work batch execution', {
+    logger.info(`Starting work batch execution ${JSON.stringify({
       block_index: blockIndex,
       farmer_count: workRequests.length,
       entropy: entropy.substring(0, 16) + '...'
-    });
+    })}`);
 
     // Execute work sequentially for each farmer
     for (const workRequest of workRequests) {
@@ -137,13 +149,13 @@ export class WorkManager {
     const totalWorkTime = Date.now() - batchStartTime;
     const successCount = workResults.filter(r => r.status === 'success' || r.status === 'recovered').length;
 
-    logger.info('Work batch execution completed', {
+    logger.info(`Work batch execution completed ${JSON.stringify({
       block_index: blockIndex,
       total_farmers: workRequests.length,
       successful_work: successCount,
       failed_work: workRequests.length - successCount,
       total_time_ms: totalWorkTime
-    });
+    })}`);
 
     return {
       blockIndex,
@@ -171,11 +183,11 @@ export class WorkManager {
       attempts: 1
     };
 
-    logger.debug('Starting work for farmer', {
+    logger.debug(`Starting work for farmer ${JSON.stringify({
       farmer_id: workRequest.farmerId,
       custodial_wallet: workRequest.custodialWallet,
       block_index: blockIndex
-    });
+    })}`);
 
     try {
       // Get farmer's public key from custodial wallet
@@ -196,12 +208,12 @@ export class WorkManager {
         '--nonce-count', this.NONCE_COUNT.toString()
       ];
       
-      logger.debug('Spawning kale-farmer with args', {
+      logger.debug(`Spawning kale-farmer with args ${JSON.stringify({
         farmer_id: workRequest.farmerId,
         args: args,
         farmer_hex_length: farmerHex.length,
         entropy_length: entropy.length
-      });
+      })}`);
 
       // Spawn the work process
       this.workState.workerProcess = spawn(args, { 
@@ -234,12 +246,87 @@ export class WorkManager {
 
       const workTime = Date.now() - startTime;
 
-      logger.info('Work completed successfully for farmer', {
+      logger.info(`Work completed successfully for farmer ${JSON.stringify({
         farmer_id: workRequest.farmerId,
         nonce: workOutput.nonce,
         zeros: workOutput.zeros,
         work_time_ms: workTime
-      });
+      })}`);
+
+      // CRITICAL: Submit work to smart contract (following reference pattern)
+      logger.info(`Submitting work to smart contract ${JSON.stringify({
+        farmer_id: workRequest.farmerId,
+        farmer_public_key: workRequest.custodialWallet,
+        nonce: workOutput.nonce,
+        hash: workOutput.hash.substring(0, 16) + '...'
+      })}`);
+
+      try {
+        const workSubmissionResult = await this.workSubmissionService.submitWork({
+          farmerPublicKey: workRequest.custodialWallet,
+          hash: new Uint8Array(Buffer.from(workOutput.hash, 'hex')),
+          nonce: BigInt(workOutput.nonce)
+        });
+
+        if (!workSubmissionResult.success) {
+          logger.error('Failed to submit work to smart contract', undefined, {
+            farmer_id: workRequest.farmerId,
+            error: workSubmissionResult.error,
+            nonce: workOutput.nonce
+          });
+          
+          // Work is FAILED if smart contract submission fails
+          // Mining success alone is not enough - work must be on-chain to be harvestable
+          return {
+            farmerId: workRequest.farmerId,
+            custodialWallet: workRequest.custodialWallet,
+            status: 'failed',  // Fixed: work failed if not submitted to contract
+            nonce: workOutput.nonce,
+            hash: workOutput.hash,
+            zeros: workOutput.zeros,
+            gap: workOutput.gap,
+            workTime,
+            attempts: 1,
+            compensationRequired: true, // Smart contract submission failed
+            error: `Smart contract submission failed: ${workSubmissionResult.error}`
+          };
+        }
+
+        const completionTimeIST = formatISTTime();
+        const harvestEligibleTime = new Date(Date.now() + 30000); // 30 seconds from now
+        const harvestEligibleTimeIST = formatISTTime(harvestEligibleTime);
+        
+        logger.info(`✅ Work successfully completed and submitted to smart contract ${JSON.stringify({
+          farmer_id: workRequest.farmerId,
+          transaction_hash: workSubmissionResult.transactionHash,
+          nonce: workOutput.nonce,
+          zeros: workOutput.zeros,
+          completed_at_ist: completionTimeIST,
+          harvest_eligible_at_ist: harvestEligibleTimeIST,
+          harvest_eligible_in: '30 seconds'
+        })}`);
+
+      } catch (error) {
+        logger.error('Exception during smart contract work submission', error as Error, {
+          farmer_id: workRequest.farmerId,
+          nonce: workOutput.nonce
+        });
+        
+        // Work is FAILED if smart contract submission throws exception
+        return {
+          farmerId: workRequest.farmerId,
+          custodialWallet: workRequest.custodialWallet,
+          status: 'failed',  // Fixed: work failed if smart contract submission throws
+          nonce: workOutput.nonce,
+          hash: workOutput.hash,
+          zeros: workOutput.zeros,
+          gap: workOutput.gap,
+          workTime,
+          attempts: 1,
+          compensationRequired: true, // Smart contract submission failed
+          error: `Smart contract submission exception: ${(error as Error).message}`
+        };
+      }
 
       return {
         farmerId: workRequest.farmerId,
@@ -257,12 +344,12 @@ export class WorkManager {
     } catch (error) {
       const workTime = Date.now() - startTime;
       
-      logger.warn('Work failed for farmer', {
+      logger.warn(`Work failed for farmer ${JSON.stringify({
         farmer_id: workRequest.farmerId,
         work_time_ms: workTime,
         attempts: this.workState.attempts,
         error: (error as Error).message
-      });
+      })}`);
 
       return {
         farmerId: workRequest.farmerId,
@@ -292,10 +379,10 @@ export class WorkManager {
     entropy: string,
     workRequest: WorkRequest
   ): Promise<WorkResult | null> {
-    logger.info('Attempting work recovery', {
+    logger.info(`Attempting work recovery ${JSON.stringify({
       farmer_id: workRequest.farmerId,
       block_index: blockIndex
-    });
+    })}`);
 
     for (let attempt = 1; attempt <= this.MAX_RECOVERY_ATTEMPTS; attempt++) {
       try {
@@ -311,11 +398,11 @@ export class WorkManager {
         );
 
         if (recoveryResult.status === 'success') {
-          logger.info('Work recovery successful', {
+          logger.info(`Work recovery successful ${JSON.stringify({
             farmer_id: workRequest.farmerId,
             recovery_attempt: attempt,
             nonce: recoveryResult.nonce
-          });
+          })}`);
 
           return {
             ...recoveryResult,
@@ -324,10 +411,10 @@ export class WorkManager {
         }
 
       } catch (error) {
-        logger.warn(`Recovery attempt ${attempt} failed`, {
+        logger.warn(`Recovery attempt ${attempt} failed ${JSON.stringify({
           farmer_id: workRequest.farmerId,
           error: (error as Error).message
-        });
+        })}`);
       }
     }
 
@@ -377,6 +464,69 @@ export class WorkManager {
 
       const workTime = Date.now() - startTime;
 
+      // Submit recovery work to smart contract (following reference pattern)
+      logger.info(`Submitting recovery work to smart contract ${JSON.stringify({
+        farmer_id: workRequest.farmerId,
+        attempt: attemptNumber,
+        nonce: workOutput.nonce
+      })}`);
+
+      try {
+        const workSubmissionResult = await this.workSubmissionService.submitWork({
+          farmerPublicKey: workRequest.custodialWallet,
+          hash: new Uint8Array(Buffer.from(workOutput.hash, 'hex')),
+          nonce: BigInt(workOutput.nonce)
+        });
+
+        if (!workSubmissionResult.success) {
+          logger.error('Failed to submit recovery work to smart contract', undefined, {
+            farmer_id: workRequest.farmerId,
+            attempt: attemptNumber,
+            error: workSubmissionResult.error
+          });
+          
+          return {
+            farmerId: workRequest.farmerId,
+            custodialWallet: workRequest.custodialWallet,
+            status: 'failed',  // Fixed: recovery work failed if not submitted to contract
+            nonce: workOutput.nonce,
+            hash: workOutput.hash,
+            zeros: workOutput.zeros,
+            gap: workOutput.gap,
+            workTime,
+            attempts: attemptNumber,
+            compensationRequired: true,
+            error: `Recovery work smart contract submission failed: ${workSubmissionResult.error}`
+          };
+        }
+
+        logger.info(`Recovery work successfully submitted to smart contract ${JSON.stringify({
+          farmer_id: workRequest.farmerId,
+          attempt: attemptNumber,
+          transaction_hash: workSubmissionResult.transactionHash
+        })}`);
+
+      } catch (error) {
+        logger.error('Exception during recovery work smart contract submission', error as Error, {
+          farmer_id: workRequest.farmerId,
+          attempt: attemptNumber
+        });
+        
+        return {
+          farmerId: workRequest.farmerId,
+          custodialWallet: workRequest.custodialWallet,
+          status: 'failed',  // Fixed: recovery work failed if smart contract submission throws
+          nonce: workOutput.nonce,
+          hash: workOutput.hash,
+          zeros: workOutput.zeros,
+          gap: workOutput.gap,
+          workTime,
+          attempts: attemptNumber,
+          compensationRequired: true,
+          error: `Recovery work smart contract submission exception: ${(error as Error).message}`
+        };
+      }
+
       return {
         farmerId: workRequest.farmerId,
         custodialWallet: workRequest.custodialWallet,
@@ -421,19 +571,19 @@ export class WorkManager {
         }
       }
       
-      logger.debug('Work process output', {
+      logger.debug(`Work process output ${JSON.stringify({
         farmer_id: farmerId,
         stdout_length: output?.length || 0,
         stderr_length: stderrOutput.length,
         stdout_preview: output?.substring(0, 200),
         stderr_preview: stderrOutput.substring(0, 200)
-      });
+      })}`);
       
       if (!output || output.trim().length === 0) {
-        logger.warn('Work process produced no stdout output', {
+        logger.warn(`Work process produced no stdout output ${JSON.stringify({
           farmer_id: farmerId,
           stderr_output: stderrOutput
-        });
+        })}`);
         return null;
       }
 
@@ -442,18 +592,18 @@ export class WorkManager {
       const lastLine = lines[lines.length - 1];
       
       if (!lastLine || lastLine.trim().length === 0) {
-        logger.warn('Work process stdout has no final line', {
+        logger.warn(`Work process stdout has no final line ${JSON.stringify({
           farmer_id: farmerId,
           lines_count: lines.length,
           stderr_output: stderrOutput
-        });
+        })}`);
         return null;
       }
       
-      logger.debug('Parsing work result line', {
+      logger.debug(`Parsing work result line ${JSON.stringify({
         farmer_id: farmerId,
         last_line: lastLine
-      });
+      })}`);
       
       const [nonce, hash] = JSON.parse(lastLine);
       
