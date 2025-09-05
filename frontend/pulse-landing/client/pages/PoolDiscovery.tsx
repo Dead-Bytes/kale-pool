@@ -326,7 +326,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
     joinPool.mutate({
       userId,
       poolerId,
-      stakePercentage: stakePercentage[0],
+      stakePercentage: stakePercentage[0] / 100, // Convert percentage to decimal
       harvestInterval: parseInt(harvestInterval)
     });
   };
