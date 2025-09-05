@@ -272,8 +272,20 @@ class APIClient {
   // ==================== Authentication APIs ====================
 
   // Get current user's info (authenticated endpoint)
-  async getMe(): Promise<any> {
-    return this.get<any>('/auth/me');
+  async getMe(): Promise<{
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      entityId: string | null;
+      createdAt: string;
+      lastLoginAt: string;
+      permissions: string[];
+      farmerId?: string;
+      status?: string;
+    }
+  }> {
+    return this.get('/auth/me');
   }
 
   // Get current farmer's data (authenticated endpoint)
@@ -316,9 +328,9 @@ class APIClient {
           localStorage.setItem('kale-pool-user-email', user.email);
           localStorage.setItem('kale-pool-user-role', user.role.toLowerCase());
           
-          // Store farmer-specific ID if user is a farmer and farmer data exists
-          if (user.role.toLowerCase() === 'farmer' && user.farmer?.id) {
-            localStorage.setItem('kale-pool-farmer-id', user.farmer.id);
+          // Store farmer-specific ID if user is a farmer and farmerId exists
+          if (user.role.toLowerCase() === 'farmer' && user.farmerId) {
+            localStorage.setItem('kale-pool-farmer-id', user.farmerId);
           }
           
           // Store user status if available
