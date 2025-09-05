@@ -270,7 +270,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
-  const [stakePercentage, setStakePercentage] = useState([5]);
+  const [stakePercentage, setStakePercentage] = useState([0]);
   const [harvestInterval, setHarvestInterval] = useState('24');
   const [step, setStep] = useState<'configure' | 'confirm' | 'success'>('configure');
   const [joinResponse, setJoinResponse] = useState<any>(null);
@@ -343,7 +343,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
   const resetModal = () => {
     setStep('configure');
     setJoinResponse(null);
-    setStakePercentage([5]);
+    setStakePercentage([0]);
     setHarvestInterval('24');
   };
 
@@ -371,7 +371,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                 value={stakePercentage}
                 onValueChange={setStakePercentage}
                 max={25}
-                min={1}
+                min={0}
                 step={1}
                 className="w-full"
               />
@@ -399,7 +399,10 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
             <Alert>
               <Shield className="w-4 h-4" />
               <AlertDescription>
-                Estimated rewards: ~{Math.round(1200 * (stakePercentage[0] / 100))} XLM per week
+                {stakePercentage[0] === 0 
+                  ? 'No stake - you will not earn rewards but can still participate in the pool'
+                  : `Estimated rewards: ~${Math.round(1200 * (stakePercentage[0] / 100))} XLM per week`
+                }
               </AlertDescription>
             </Alert>
 
@@ -444,10 +447,6 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Harvest Interval:</span>
                   <span>{joinResponse.harvestInterval}h</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Est. Rewards:</span>
-                  <span>{joinResponse.estimatedRewards} XLM/week</span>
                 </div>
               </div>
             </div>

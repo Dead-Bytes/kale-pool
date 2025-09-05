@@ -32,7 +32,7 @@ export default function Landing() {
           <div className="p-6 rounded-xl border border-white/10 bg-white/5">
             <h3 className="text-xl font-semibold mb-2 text-white">Farmers</h3>
             <p className="text-white/70 mb-4">Join a pool and earn steady KALE rewards—no infrastructure needed.</p>
-            <a href="/farmer/wallet" className="text-[#95c697] hover:underline">Join as Farmer →</a>
+            <a href="/farmer/register" className="text-[#95c697] hover:underline">Join as Farmer →</a>
           </div>
           <div className="p-6 rounded-xl border border-white/10 bg-white/5">
             <h3 className="text-xl font-semibold mb-2 text-white">Pool Operators</h3>
@@ -127,20 +127,6 @@ export default function Landing() {
 
       {/* FAQ - with accordion */}
       <FAQs />
-
-      {/* Final CTA band */}
-      <section className="px-4 py-12 md:py-16">
-        <div className="container mx-auto rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-          <h2 className="text-2xl md:text-3xl font-semibold mb-3 text-white">Launch your KALE pool today</h2>
-          <p className="text-white/70 mb-6">Book a demo or start with the hosted plan. Scale as you grow.</p>
-          <div className="flex items-center justify-center gap-4">
-            <a href="/dashboard" className="neumorphic-button hover:shadow-[0_0_20px_rgba(149,198,151,0.5)] relative inline-flex overflow-hidden rounded-full border border-white/10 bg-gradient-to-b from-white/10 to-white/5 px-6 py-3 text-sm text-white">
-              See Live Dashboard
-            </a>
-            <a href="/pooler/blocks" className="text-[#95c697] hover:underline text-sm">Run a Pool →</a>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
