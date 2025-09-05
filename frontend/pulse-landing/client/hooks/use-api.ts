@@ -245,6 +245,17 @@ export function useHarvest(
 
 // ==================== Utility Hooks ====================
 
+// ==================== Authentication Hooks ====================
+
+export function useCurrentUser(options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['current-user'],
+    queryFn: () => apiClient.getMe(),
+    staleTime: 30000,
+    ...options,
+  });
+}
+
 // ==================== Farmer Analytics Hooks ====================
 
 export function useCurrentFarmer(options?: UseQueryOptions<any, APIClientError>) {

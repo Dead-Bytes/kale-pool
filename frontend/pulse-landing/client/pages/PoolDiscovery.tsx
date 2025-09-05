@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePoolers, usePoolerDetails, useJoinPool, useConfirmJoin } from '@/hooks/use-api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -276,6 +277,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
   const [joinResponse, setJoinResponse] = useState<any>(null);
   
   const { toast } = useToast();
+  const { user: currentUser, isLoading: userLoading, isAuthenticated } = useAuth();
   
   const joinPool = useJoinPool({
     onSuccess: (data) => {
@@ -310,24 +312,46 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
     }
   });
 
+  // Convert hours to blocks (assuming 1 block ≈ 1 hour for KALE blockchain)
+  // Backend expects 1-20 blocks, so we'll cap the conversion appropriately
+  const convertHoursToBlocks = (hours: number): number => {
+    // Direct mapping for practical purposes:
+    // 6 hours -> 6 blocks
+    // 12 hours -> 12 blocks  
+    // 24 hours -> 20 blocks (capped at max)
+    // 48+ hours -> 20 blocks (capped at max)
+    return Math.min(hours, 20);
+  };
+
   const handleJoin = () => {
     if (!poolerId) return;
     
-    const userId = localStorage.getItem('kale-pool-user-id');
-    if (!userId) {
+    if (userLoading) {
       toast({
-        title: 'Registration Required',
-        description: 'Please complete farmer registration first.',
+        title: 'Loading',
+        description: 'Please wait while we verify your authentication.',
+        variant: 'default'
+      });
+      return;
+    }
+    
+    if (!isAuthenticated || !currentUser?.id) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please log in first.',
         variant: 'destructive'
       });
       return;
     }
 
+    const hoursRequested = parseInt(harvestInterval);
+    const blocksToSend = convertHoursToBlocks(hoursRequested);
+
     joinPool.mutate({
-      userId,
+      userId: currentUser.id,
       poolerId,
       stakePercentage: stakePercentage[0] / 100, // Convert percentage to decimal
-      harvestInterval: parseInt(harvestInterval)
+      harvestInterval: blocksToSend
     });
   };
 

@@ -271,6 +271,11 @@ class APIClient {
 
   // ==================== Authentication APIs ====================
 
+  // Get current user's info (authenticated endpoint)
+  async getMe(): Promise<any> {
+    return this.get<any>('/auth/me');
+  }
+
   // Get current farmer's data (authenticated endpoint)
   async getCurrentFarmer(): Promise<any> {
     return this.get<any>('/farmers');
@@ -314,15 +319,15 @@ class APIClient {
     return localStorage.getItem('kale-pool-token');
   }
 
-  // Utility function to decode JWT token and get farmer ID
-  getFarmerIdFromToken(): string | null {
+  // Utility function to decode JWT token and get user ID
+  getUserIdFromToken(): string | null {
     const token = this.getStoredToken();
     if (!token) return null;
     
     try {
       // Decode JWT token (without verification since it's just for getting the ID)
       const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.entityId || null;
+      return payload.id || null;
     } catch (error) {
       console.error('Failed to decode token:', error);
       return null;

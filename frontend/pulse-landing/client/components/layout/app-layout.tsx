@@ -11,6 +11,7 @@ import { SidebarNav } from './sidebar-nav';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -36,9 +37,12 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const [currentRole, setCurrentRole] = useState<'farmer' | 'pooler' | 'admin'>('farmer');
+  const { user, isAuthenticated } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Convert backend role format to lowercase for UI consistency
+  const currentRole = user?.role.toLowerCase() as 'farmer' | 'pooler' | 'admin' || 'farmer';
 
   // Handle responsive behavior
   useEffect(() => {
@@ -55,20 +59,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Load saved role from localStorage
-  useEffect(() => {
-    const savedRole = localStorage.getItem('kale-pool-role') as 'farmer' | 'pooler' | 'admin';
-    if (savedRole) {
-      setCurrentRole(savedRole);
-    }
-  }, []);
-
-  const handleRoleChange = (role: 'farmer' | 'pooler' | 'admin') => {
-    setCurrentRole(role);
-    localStorage.setItem('kale-pool-role', role);
-    setMobileMenuOpen(false);
-  };
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -105,7 +95,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="w-full h-full">
             <SidebarNav 
               currentRole={currentRole} 
-              onRoleChange={handleRoleChange}
               collapsed={sidebarCollapsed && !mobileMenuOpen}
             />
           </div>
@@ -167,35 +156,3 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
 }
 
-// Context for role management
-import { createContext, useContext } from 'react';
-
-interface RoleContextType {
-  currentRole: 'farmer' | 'pooler' | 'admin';
-  setRole: (role: 'farmer' | 'pooler' | 'admin') => void;
-}
-
-const RoleContext = createContext<RoleContextType | undefined>(undefined);
-
-export function useRole() {
-  const context = useContext(RoleContext);
-  if (!context) {
-    throw new Error('useRole must be used within a RoleProvider');
-  }
-  return context;
-}
-
-export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [currentRole, setCurrentRole] = useState<'farmer' | 'pooler' | 'admin'>('farmer');
-
-  const setRole = (role: 'farmer' | 'pooler' | 'admin') => {
-    setCurrentRole(role);
-    localStorage.setItem('kale-pool-role', role);
-  };
-
-  return (
-    <RoleContext.Provider value={{ currentRole, setRole }}>
-      {children}
-    </RoleContext.Provider>
-  );
-}

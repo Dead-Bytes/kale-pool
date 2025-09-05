@@ -17,6 +17,7 @@ interface SignInPageProps {
   onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
+  isLoading?: boolean;
 }
 
 const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -44,6 +45,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   onSignIn,
   onResetPassword,
   onCreateAccount,
+  isLoading = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -108,8 +110,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 <a href="#" onClick={(e) => { e.preventDefault(); onResetPassword?.(); }} className="hover:underline text-[#95c697] transition-colors">Reset password</a>
               </div>
 
-              <button type="submit" className="w-full rounded-2xl bg-[#95c697] py-4 font-medium text-black hover:bg-[#7ba87d] transition-colors">
-                Sign In
+              <button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full rounded-2xl bg-[#95c697] py-4 font-medium text-black hover:bg-[#7ba87d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Signing In...' : 'Sign In'}
               </button>
             </form>
 

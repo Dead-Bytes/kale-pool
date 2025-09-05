@@ -9,29 +9,20 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Activity,
   BarChart3,
-  ChevronDown,
   Construction,
   Database,
   HardHat,
   Home,
   Leaf,
-  
   Network,
   Pickaxe,
   Settings,
@@ -174,12 +165,12 @@ const navigation: NavSection[] = [
 
 interface SidebarNavProps {
   currentRole: 'farmer' | 'pooler' | 'admin';
-  onRoleChange: (role: 'farmer' | 'pooler' | 'admin') => void;
   collapsed?: boolean;
 }
 
-export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: SidebarNavProps) {
+export function SidebarNav({ currentRole, collapsed = false }: SidebarNavProps) {
   const location = useLocation();
+  const { user } = useAuth();
   
 
   const filteredNavigation = navigation.filter(section => 
@@ -203,38 +194,6 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
         </div>
       </div>
 
-      {/* Role Selector */}
-      <div className="p-4 border-b border-sidebar-border">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full justify-between" size={collapsed ? 'icon' : 'default'}>
-              {!collapsed && (
-                <>
-                  <span className="capitalize">{currentRole}</span>
-                  <ChevronDown className="w-4 h-4" />
-                </>
-              )}
-              {collapsed && <Settings className="w-4 h-4" />}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onRoleChange('farmer')}>
-              <Wallet className="w-4 h-4 mr-2" />
-              Farmer
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRoleChange('pooler')}>
-              <Database className="w-4 h-4 mr-2" />
-              Pooler
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRoleChange('admin')}>
-              <Settings className="w-4 h-4 mr-2" />
-              Admin
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -283,28 +242,32 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border space-y-2">
-        {/* User Profile */}
-        {!collapsed && (
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
+      {/* User Info */}
+      <div className="p-4 border-t border-sidebar-border">
+        {!collapsed && user && (
+          <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8">
               <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                {currentRole[0].toUpperCase()}
+                {user.email.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {currentRole === 'farmer' && 'Farmer User'}
-                {currentRole === 'pooler' && 'Pool Operator'}
-                {currentRole === 'admin' && 'Administrator'}
+                {user.email}
               </p>
-              <p className="text-xs text-sidebar-foreground/60">
-                {currentRole === 'farmer' && 'Stake & Harvest'}
-                {currentRole === 'pooler' && 'Coordinate Pools'}
-                {currentRole === 'admin' && 'System Admin'}
+              <p className="text-xs text-sidebar-foreground/60 capitalize">
+                {currentRole}
               </p>
             </div>
+          </div>
+        )}
+        {collapsed && user && (
+          <div className="flex justify-center">
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                {user.email.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
           </div>
         )}
       </div>
