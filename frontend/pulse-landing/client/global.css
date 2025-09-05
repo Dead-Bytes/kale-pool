@@ -1,0 +1,181 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * KALE Pool Theme - Modern data-focused blockchain coordination
+   * Colors represent growth, technology, and financial data
+   * HSL format required for Tailwind CSS variables
+   */
+  :root {
+    /* Base colors - clean whites and grays */
+    --background: 0 0% 100%;
+    --foreground: 220 13% 13%;
+
+    /* Cards and surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 13%;
+
+    /* Popovers and overlays */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 13%;
+
+    /* Primary - KALE green for growth and harvest */
+    --primary: 142 69% 45%;
+    --primary-foreground: 0 0% 98%;
+
+    /* Secondary - subtle gray for supporting elements */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 13% 13%;
+
+    /* Muted - for disabled states and subtle text */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent - blue for data and technology elements */
+    --accent: 213 94% 68%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Success - bright green for positive states */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+
+    /* Warning - orange for caution states */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+
+    /* Destructive - red for errors and dangerous actions */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders and inputs */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 142 69% 45%;
+
+    /* Border radius */
+    --radius: 0.5rem;
+
+    /* Sidebar - darker theme for navigation */
+    --sidebar-background: 220 13% 98%;
+    --sidebar-foreground: 220 13% 13%;
+    --sidebar-primary: 142 69% 45%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 14% 94%;
+    --sidebar-accent-foreground: 220 13% 13%;
+    --sidebar-border: 220 13% 87%;
+    --sidebar-ring: 142 69% 45%;
+
+    /* Data visualization colors */
+    --chart-1: 142 69% 45%;
+    --chart-2: 213 94% 68%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 280 100% 70%;
+    --chart-5: 12 76% 61%;
+  }
+
+  .dark {
+    /* Dark theme - neutral dark with green accents for selected/active states */
+    /* Background and text - neutral dark */
+    --background: 0 0% 7%;         /* #121212 - neutral dark */
+    --foreground: 0 0% 100%;       /* #ffffff */
+
+    /* Cards and surfaces - neutral dark gray */
+    --card: 0 0% 9%;               /* #171717 */
+    --card-foreground: 0 0% 100%;
+
+    /* Popovers and overlays */
+    --popover: 0 0% 9%;            /* #171717 */
+    --popover-foreground: 0 0% 100%;
+
+    /* Primary - KALE green for selected/active states only */
+    --primary: 124 30% 68%;        /* #95c697 - mint green for active */
+    --primary-foreground: 0 0% 7%;
+
+    /* Secondary surface - neutral dark */
+    --secondary: 0 0% 12%;         /* #1f1f1f */
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted text and subtle UI - neutral grays */
+    --muted: 0 0% 12%;             /* #1f1f1f */
+    --muted-foreground: 0 0% 65%;  /* #a6a6a6 - neutral gray text */
+
+    /* Accent - KALE green for highlights */
+    --accent: 124 30% 68%;         /* #95c697 */
+    --accent-foreground: 0 0% 7%;
+
+    /* Success and Destructive - keep green theme for status */
+    --success: 142 90% 45%;        /* #0bda3c */
+    --success-foreground: 0 0% 7%;
+    --warning: 38 92% 62%;         /* amber for warnings */
+    --warning-foreground: 0 0% 7%;
+    --destructive: 8 95% 60%;      /* #fa4f38 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders and inputs - neutral dark */
+    --border: 0 0% 20%;            /* #333333 */
+    --input: 0 0% 12%;             /* #1f1f1f */
+    --ring: 124 30% 68%;           /* #95c697 - green focus ring */
+
+    /* Sidebar - neutral dark with green for active states */
+    --sidebar-background: 0 0% 7%; /* #121212 */
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 124 30% 68%; /* #95c697 - active nav item */
+    --sidebar-primary-foreground: 0 0% 7%;
+    --sidebar-accent: 0 0% 12%;    /* #1f1f1f - hover state */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 20%;    /* #333333 */
+    --sidebar-ring: 124 30% 68%;   /* #95c697 */
+
+    /* Charts - green accent for data */
+    --chart-1: 124 30% 68%;        /* #95c697 - primary data */
+    --chart-2: 0 0% 40%;           /* #666666 - secondary data */
+    --chart-3: 142 90% 45%;        /* #0bda3c - success data */
+    --chart-4: 8 95% 60%;          /* #fa4f38 - error data */
+    --chart-5: 38 92% 62%;         /* amber - warning data */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .neumorphic-button::after {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300 bg-gradient-to-br from-[#95c697]/20 to-transparent rounded-full;
+  }
+
+  .neumorphic-button:hover::after {
+    @apply opacity-100;
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

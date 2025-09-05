@@ -182,6 +182,7 @@ const registerRoutes = (app: express.Application): void => {
   // Service info endpoint
   app.get('/info', async (req: Request, res: Response) => {
     try {
+      const automatedHarvestStatus = automatedHarvestService.getStatus();
       const info = {
         service: 'KALE Pool Mining Backend',
         version: '2.0.0',
@@ -201,9 +202,9 @@ const registerRoutes = (app: express.Application): void => {
           automated_harvest: automatedHarvestStatus
         },
         config: {
-          max_farmers_per_request: BACKEND_CONFIG.MAX_FARMERS_PER_REQUEST,
-          api_rate_limit: BACKEND_CONFIG.API_RATE_LIMIT,
-          request_timeout: BACKEND_CONFIG.REQUEST_TIMEOUT
+          max_farmers_per_request: 50,
+          api_rate_limit: 100,
+          request_timeout: 30000
         },
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
@@ -311,10 +312,12 @@ const registerRoutes = (app: express.Application): void => {
         });
       } catch (error) {
         // If farmer creation fails, clean up the user record
+        console.log('Farmer registration failed', error);
         await userQueries.deleteUserById(newUserId);
         return res.status(500).json({
           error: 'REGISTRATION_FAILED',
-          message: 'Failed to register farmer'
+          message: 'Failed to register farmer',
+          error2: error
         });
       }
 
