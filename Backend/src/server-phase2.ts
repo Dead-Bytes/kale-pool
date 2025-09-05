@@ -29,6 +29,8 @@ import authRoutes from './routes/auth';
 import poolerRoutes from './routes/poolers';
 import contractRoutes from './routes/contracts';
 import farmerRoutes from './routes/farmers';
+import farmerExitRoutes from './routes/farmer-exits';
+import adminExitRoutes from './routes/admin-exits';
 
 // Import rate limiting middleware
 import { logRateLimitHeaders } from './middleware/rateLimit';
@@ -126,6 +128,12 @@ const registerRoutes = (app: express.Application): void => {
   
   // Farmer analytics
   app.use('/farmers', farmerRoutes);
+  
+  // Farmer exit management
+  app.use('/farmer-exits', farmerExitRoutes);
+  
+  // Admin exit management
+  app.use('/admin/exits', adminExitRoutes);
 
   // ======================
   // LEGACY/HEALTH ENDPOINTS
