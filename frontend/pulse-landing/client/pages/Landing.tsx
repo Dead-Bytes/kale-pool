@@ -32,12 +32,12 @@ export default function Landing() {
           <div className="p-6 rounded-xl border border-white/10 bg-white/5">
             <h3 className="text-xl font-semibold mb-2 text-white">Farmers</h3>
             <p className="text-white/70 mb-4">Join a pool and earn steady KALE rewards—no infrastructure needed.</p>
-            <a href="/farmer/register" className="text-[#95c697] hover:underline">Join as Farmer →</a>
+            <a href="/auth/signup" className="text-[#95c697] hover:underline">Join as Farmer →</a>
           </div>
           <div className="p-6 rounded-xl border border-white/10 bg-white/5">
             <h3 className="text-xl font-semibold mb-2 text-white">Pool Operators</h3>
             <p className="text-white/70 mb-4">Turnkey pool orchestration, health checks, automated payouts.</p>
-            <a href="/pooler/blocks" className="text-[#95c697] hover:underline">Run a Pool →</a>
+            <a href="/pool-operator" className="text-[#95c697] hover:underline">Run a Pool →</a>
           </div>
           <div className="p-6 rounded-xl border border-white/10 bg-white/5">
             <h3 className="text-xl font-semibold mb-2 text-white">Admins / Enterprises</h3>

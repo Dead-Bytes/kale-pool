@@ -18,7 +18,6 @@ export default function SignIn() {
         { avatarSrc: 'https://randomuser.me/api/portraits/men/32.jpg', name: 'David Martinez', handle: '@davidcreates', text: 'Intuitive and helpful.' },
       ]}
       onSignIn={handleSignIn}
-      onGoogleSignIn={() => navigate('/dashboard')}
       onResetPassword={() => {}}
       onCreateAccount={() => navigate('/auth/signup')}
     />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   HardHat, 
   Search, 
@@ -18,93 +20,85 @@ import {
   CheckCircle,
   XCircle,
   FileText,
-  BarChart3
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
+import { useFarmerSummary, useFarmerPlantings, useFarmerHarvests } from '@/hooks/use-api';
 
-// Mock data - replace with actual API calls
-const mockWorkHistory = [
-  {
-    id: '1',
-    farmerId: 'farmer_001',
-    blockIndex: 12345,
-    nonce: '0x1a2b3c4d',
-    status: 'success',
-    reward: '1000',
-    timestamp: '2024-01-15T10:30:00Z',
-    poolerId: 'main_pool',
-    processingTime: 1.2
-  },
-  {
-    id: '2',
-    farmerId: 'farmer_002',
-    blockIndex: 12346,
-    nonce: '0x5e6f7g8h',
-    status: 'failed',
-    reward: '0',
-    timestamp: '2024-01-15T10:32:00Z',
-    poolerId: 'main_pool',
-    processingTime: 0.8
-  },
-  {
-    id: '3',
-    farmerId: 'farmer_003',
-    blockIndex: 12347,
-    nonce: '0x9i0j1k2l',
-    status: 'success',
-    reward: '1000',
-    timestamp: '2024-01-15T10:35:00Z',
-    poolerId: 'secondary_pool',
-    processingTime: 1.5
-  },
-  {
-    id: '4',
-    farmerId: 'farmer_001',
-    blockIndex: 12348,
-    nonce: '0x3m4n5o6p',
-    status: 'success',
-    reward: '1000',
-    timestamp: '2024-01-15T11:00:00Z',
-    poolerId: 'main_pool',
-    processingTime: 1.1
-  },
-  {
-    id: '5',
-    farmerId: 'farmer_004',
-    blockIndex: 12349,
-    nonce: '0x7q8r9s0t',
-    status: 'failed',
-    reward: '0',
-    timestamp: '2024-01-15T11:15:00Z',
-    poolerId: 'test_pool',
-    processingTime: 0.9
-  }
-];
+// Work history data will be fetched from API
+interface WorkHistoryItem {
+  id: string;
+  farmerId: string;
+  blockIndex: number;
+  nonce: string;
+  status: 'success' | 'failed' | 'pending';
+  reward: string;
+  timestamp: string;
+  poolerId: string;
+  processingTime: number;
+}
 
-const mockWorkStats = {
-  totalSubmissions: 1250,
-  successRate: 94.2,
-  avgProcessingTime: 1.3,
-  totalRewards: 125000,
-  activeFarmers: 45,
-  peakHour: '10:00-11:00',
-  topFarmer: 'farmer_001'
-};
+interface WorkStats {
+  totalSubmissions: number;
+  successRate: number;
+  avgProcessingTime: number;
+  totalRewards: number;
+  activeFarmers: number;
+  peakHour: string;
+  topFarmer: string;
+}
 
-const mockFarmerStats = [
-  { farmerId: 'farmer_001', submissions: 45, successRate: 97.8, totalRewards: 45000 },
-  { farmerId: 'farmer_002', submissions: 38, successRate: 94.7, totalRewards: 38000 },
-  { farmerId: 'farmer_003', submissions: 42, successRate: 95.2, totalRewards: 42000 },
-  { farmerId: 'farmer_004', submissions: 35, successRate: 91.4, totalRewards: 35000 },
-];
+interface FarmerStats {
+  farmerId: string;
+  submissions: number;
+  successRate: number;
+  totalRewards: number;
+}
 
 export default function WorkHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [poolerFilter, setPoolerFilter] = useState('all');
   const [timeRange, setTimeRange] = useState('7d');
-  const [isLoading, setIsLoading] = useState(false);
+  const [workHistory, setWorkHistory] = useState<WorkHistoryItem[]>([]);
+  const [farmerStats, setFarmerStats] = useState<FarmerStats[]>([]);
 
-  const currentFarmerId = (typeof window !== 'undefined' && localStorage.getItem('currentFarmerId')) || '';
+  const currentFarmerId = (typeof window !== 'undefined' && localStorage.getItem('kale-pool-farmer-id')) || '';
+
+  // API hooks
+  const { 
+    data: farmerSummary, 
+    isLoading: summaryLoading, 
+    error: summaryError,
+    refetch: refetchSummary 
+  } = useFarmerSummary(currentFarmerId, timeRange as '24h' | '7d' | '30d' | 'all');
+
+  const { 
+    data: plantingsData, 
+    isLoading: plantingsLoading, 
+    error: plantingsError,
+    refetch: refetchPlantings 
+  } = useFarmerPlantings(currentFarmerId, {
+    status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
+    poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
+    page: 1,
+    limit: 100
+  });
+
+  const { 
+    data: harvestsData, 
+    isLoading: harvestsLoading, 
+    error: harvestsError,
+    refetch: refetchHarvests 
+  } = useFarmerHarvests(currentFarmerId, {
+    status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
+    poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
+    page: 1,
+    limit: 100
+  });
+
+  const isLoading = summaryLoading || plantingsLoading || harvestsLoading;
+  const hasError = summaryError || plantingsError || harvestsError;
 
   const handleExport = () => {
     // Implement CSV/PDF export
@@ -112,12 +106,58 @@ export default function WorkHistory() {
   };
 
   const handleRefresh = () => {
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => setIsLoading(false), 1000);
+    refetchSummary();
+    refetchPlantings();
+    refetchHarvests();
   };
 
-  const filteredWorkHistory = mockWorkHistory
+  // Process data from APIs
+  useEffect(() => {
+    if (plantingsData && harvestsData) {
+      // Combine plantings and harvests data for work history
+      const combinedHistory: WorkHistoryItem[] = [];
+      
+      // Add plantings as work submissions
+      if (plantingsData.plantings) {
+        plantingsData.plantings.forEach((planting: any) => {
+          combinedHistory.push({
+            id: planting.id || `planting-${planting.blockIndex}`,
+            farmerId: planting.farmerId || currentFarmerId,
+            blockIndex: planting.blockIndex,
+            nonce: planting.nonce || 'N/A',
+            status: planting.status === 'success' ? 'success' : 'failed',
+            reward: planting.reward || '0',
+            timestamp: planting.timestamp || planting.createdAt,
+            poolerId: planting.poolerId || 'Unknown',
+            processingTime: planting.processingTime || 0
+          });
+        });
+      }
+
+      // Add harvests as work completions
+      if (harvestsData.harvests) {
+        harvestsData.harvests.forEach((harvest: any) => {
+          combinedHistory.push({
+            id: harvest.id || `harvest-${harvest.blockIndex}`,
+            farmerId: harvest.farmerId || currentFarmerId,
+            blockIndex: harvest.blockIndex,
+            nonce: harvest.nonce || 'N/A',
+            status: harvest.status === 'success' ? 'success' : 'failed',
+            reward: harvest.reward || '0',
+            timestamp: harvest.timestamp || harvest.createdAt,
+            poolerId: harvest.poolerId || 'Unknown',
+            processingTime: harvest.processingTime || 0
+          });
+        });
+      }
+
+      // Sort by timestamp (newest first)
+      combinedHistory.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setWorkHistory(combinedHistory);
+    }
+  }, [plantingsData, harvestsData, currentFarmerId]);
+
+  const filteredWorkHistory = workHistory
     .filter(work => (currentFarmerId ? work.farmerId === currentFarmerId : true))
     .filter(work => {
     const matchesSearch = work.farmerId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -158,7 +198,10 @@ export default function WorkHistory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
-                <p className="text-2xl font-bold">{mockWorkStats.totalSubmissions.toLocaleString()}</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-16" /> : 
+                   (farmerSummary?.totalSubmissions || workHistory.length).toLocaleString()}
+                </p>
               </div>
               <HardHat className="w-8 h-8 text-primary" />
             </div>
@@ -170,7 +213,10 @@ export default function WorkHistory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
-                <p className="text-2xl font-bold">{mockWorkStats.successRate}%</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-16" /> : 
+                   `${farmerSummary?.successRate || 0}%`}
+                </p>
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
             </div>
@@ -182,7 +228,10 @@ export default function WorkHistory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Avg Processing</p>
-                <p className="text-2xl font-bold">{mockWorkStats.avgProcessingTime}s</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-16" /> : 
+                   `${farmerSummary?.avgProcessingTime || 0}s`}
+                </p>
               </div>
               <Clock className="w-8 h-8 text-warning" />
             </div>
@@ -194,7 +243,10 @@ export default function WorkHistory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Rewards</p>
-                <p className="text-2xl font-bold">{mockWorkStats.totalRewards.toLocaleString()}</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-20" /> : 
+                   (farmerSummary?.totalRewards || 0).toLocaleString()}
+                </p>
               </div>
               <TrendingUp className="w-8 h-8 text-success" />
             </div>
@@ -205,8 +257,11 @@ export default function WorkHistory() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Farmers</p>
-                <p className="text-2xl font-bold">{mockWorkStats.activeFarmers}</p>
+                <p className="text-sm font-medium text-muted-foreground">Active Pools</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-16" /> : 
+                   farmerSummary?.activePools || 0}
+                </p>
               </div>
               <Users className="w-8 h-8 text-primary" />
             </div>
@@ -218,7 +273,10 @@ export default function WorkHistory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Peak Hour</p>
-                <p className="text-2xl font-bold">{mockWorkStats.peakHour}</p>
+                <p className="text-2xl font-bold">
+                  {isLoading ? <Skeleton className="h-8 w-16" /> : 
+                   farmerSummary?.peakHour || 'N/A'}
+                </p>
               </div>
               <BarChart3 className="w-8 h-8 text-warning" />
             </div>
@@ -293,6 +351,16 @@ export default function WorkHistory() {
         </CardContent>
       </Card>
 
+      {/* Error Alert */}
+      {hasError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load work history data. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Main Content Tabs */}
       <Tabs defaultValue="history" className="space-y-4">
         <TabsList>
@@ -326,31 +394,58 @@ export default function WorkHistory() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredWorkHistory.map((work) => (
-                      <TableRow key={work.id}>
-                        <TableCell className="font-mono text-sm">{work.farmerId}</TableCell>
-                        <TableCell className="font-mono">{work.blockIndex}</TableCell>
-                        <TableCell className="font-mono text-sm">{work.nonce}</TableCell>
-                        <TableCell>
-                          <Badge variant={work.status === 'success' ? 'default' : 'destructive'}>
-                            {work.status === 'success' ? (
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                            ) : (
-                              <XCircle className="w-3 h-3 mr-1" />
-                            )}
-                            {work.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">{work.reward}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{work.poolerId}</Badge>
-                        </TableCell>
-                        <TableCell>{work.processingTime}s</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(work.timestamp).toLocaleString()}
+                    {isLoading ? (
+                      Array.from({ length: 5 }).map((_, index) => (
+                        <TableRow key={index}>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : filteredWorkHistory.length > 0 ? (
+                      filteredWorkHistory.map((work) => (
+                        <TableRow key={work.id}>
+                          <TableCell className="font-mono text-sm">{work.farmerId}</TableCell>
+                          <TableCell className="font-mono">{work.blockIndex}</TableCell>
+                          <TableCell className="font-mono text-sm">{work.nonce}</TableCell>
+                          <TableCell>
+                            <Badge variant={work.status === 'success' ? 'default' : 'destructive'}>
+                              {work.status === 'success' ? (
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                              ) : (
+                                <XCircle className="w-3 h-3 mr-1" />
+                              )}
+                              {work.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono">{work.reward}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{work.poolerId}</Badge>
+                          </TableCell>
+                          <TableCell>{work.processingTime}s</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(work.timestamp).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <div className="flex flex-col items-center gap-2">
+                            <HardHat className="w-8 h-8 text-muted-foreground" />
+                            <p className="text-muted-foreground">No work history found</p>
+                            <p className="text-sm text-muted-foreground">
+                              Work submissions will appear here once you start participating in pools
+                            </p>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -390,26 +485,36 @@ export default function WorkHistory() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mockFarmerStats.map((farmer, index) => (
-                  <div key={farmer.farmerId} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-                        #{index + 1}
+                {farmerStats.length > 0 ? (
+                  farmerStats.map((farmer, index) => (
+                    <div key={farmer.farmerId} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <h3 className="font-medium font-mono">{farmer.farmerId}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {farmer.submissions} submissions • {farmer.totalRewards.toLocaleString()} rewards
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-medium font-mono">{farmer.farmerId}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {farmer.submissions} submissions • {farmer.totalRewards.toLocaleString()} rewards
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <Badge variant={farmer.successRate > 95 ? 'default' : farmer.successRate > 90 ? 'secondary' : 'destructive'}>
+                          {farmer.successRate}% success
+                        </Badge>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <Badge variant={farmer.successRate > 95 ? 'default' : farmer.successRate > 90 ? 'secondary' : 'destructive'}>
-                        {farmer.successRate}% success
-                      </Badge>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No farmer performance data available</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Performance rankings will appear once farmers start submitting work
+                    </p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

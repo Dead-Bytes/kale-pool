@@ -87,7 +87,7 @@ export function PlaceholderPage({
             <Link to="/">Go to Dashboard</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/farmer/register">Start with Registration</Link>
+            <Link to="/auth/signup">Start with Registration</Link>
           </Button>
         </div>
       </div>

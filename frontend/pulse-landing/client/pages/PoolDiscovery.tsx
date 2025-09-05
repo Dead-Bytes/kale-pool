@@ -375,8 +375,23 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                 step={1}
                 className="w-full"
               />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="25"
+                  value={stakePercentage[0]}
+                  onChange={(e) => {
+                    const value = Math.max(0, Math.min(25, parseInt(e.target.value) || 0));
+                    setStakePercentage([value]);
+                  }}
+                  className="w-20 text-center"
+                  placeholder="0"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Percentage of your balance to stake in this pool
+                Percentage of your balance to stake in this pool (0-25%)
               </p>
             </div>
 
@@ -396,15 +411,6 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
               </Select>
             </div>
 
-            <Alert>
-              <Shield className="w-4 h-4" />
-              <AlertDescription>
-                {stakePercentage[0] === 0 
-                  ? 'No stake - you will not earn rewards but can still participate in the pool'
-                  : `Estimated rewards: ~${Math.round(1200 * (stakePercentage[0] / 100))} XLM per week`
-                }
-              </AlertDescription>
-            </Alert>
 
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>

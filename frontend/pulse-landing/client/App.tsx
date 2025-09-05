@@ -15,7 +15,6 @@ import Dashboard from "./pages/Dashboard";
 import Landing from "./pages/Landing";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
-import FarmerRegistration from "./pages/FarmerRegistration";
 import WalletRegistration from "./pages/WalletRegistration";
 import PoolDiscovery from "./pages/PoolDiscovery";
 import PoolerConsole from "./pages/PoolerConsole";
@@ -26,6 +25,7 @@ import NetworkStatus from "./pages/NetworkStatus";
 import MyPool from "./pages/MyPool";
 import PoolerStatus from "./pages/PoolerStatus";
 import ManageFarmers from "./pages/ManageFarmers";
+import PoolOperatorDev from "./pages/PoolOperatorDev";
 import NotFound from "./pages/NotFound";
 
 // Icons for placeholder pages
@@ -56,8 +56,8 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/auth/signin" element={<SignIn />} />
               <Route path="/auth/signup" element={<SignUp />} />
-              <Route path="/farmer/register" element={<FarmerRegistration />} />
               <Route path="/farmer/wallet" element={<WalletRegistration />} />
+              <Route path="/pool-operator" element={<PoolOperatorDev />} />
 
               {/* App routes with layout (sidebar, header) */}
               <Route element={<AppLayout />}>

@@ -26,6 +26,7 @@ import {
   Activity,
   BarChart3,
   ChevronDown,
+  Construction,
   Database,
   HardHat,
   Home,
@@ -101,6 +102,12 @@ const navigation: NavSection[] = [
     title: 'Pooler Console',
     roles: ['pooler', 'admin'],
     items: [
+      {
+        title: 'Pool Operator Portal',
+        href: '/pool-operator',
+        icon: Construction,
+        description: 'Advanced pool management tools',
+      },
       {
         title: 'Block Notifications',
         href: '/pooler/blocks',

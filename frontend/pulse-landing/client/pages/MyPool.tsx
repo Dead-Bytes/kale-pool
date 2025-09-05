@@ -195,7 +195,7 @@ export default function MyPool() {
             You need to register as a farmer to view your pool information.
           </p>
           <Button asChild>
-            <Link to="/register">Register as Farmer</Link>
+            <Link to="/auth/signup">Register as Farmer</Link>
           </Button>
         </div>
       </div>
