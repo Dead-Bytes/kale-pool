@@ -51,6 +51,9 @@ interface KalePoolConfig {
     PORT: number;
     ID: string;
     CORS_ORIGIN: string[];
+    JWT_SECRET: string;
+    JWT_EXPIRES_IN: number;
+    REFRESH_TOKEN_EXPIRES_IN: number;
   };
   
   // Pooler settings
@@ -173,6 +176,9 @@ function loadConfig(): KalePoolConfig {
         PORT: validateNumericEnvironmentVariable('BACKEND_PORT', process.env.BACKEND_PORT || process.env.PORT, false, 3000),
         ID: validateEnvironmentVariable('BACKEND_ID', process.env.BACKEND_ID, false) || 'kale-pool-backend',
         CORS_ORIGIN: parseCorsOrigins(process.env.CORS_ORIGIN),
+        JWT_SECRET: validateEnvironmentVariable('JWT_SECRET', process.env.JWT_SECRET, false) || 'dev-secret-key-change-in-production-' + Math.random().toString(36),
+        JWT_EXPIRES_IN: validateNumericEnvironmentVariable('JWT_EXPIRES_IN', process.env.JWT_EXPIRES_IN, false, 3600),
+        REFRESH_TOKEN_EXPIRES_IN: validateNumericEnvironmentVariable('REFRESH_TOKEN_EXPIRES_IN', process.env.REFRESH_TOKEN_EXPIRES_IN, false, 604800),
       },
       
       // Pooler settings

@@ -23,6 +23,15 @@ import {
   registerPooler
 } from './routes/registration-routes';
 
+// Import new API routes
+import authRoutes from './routes/auth';
+import poolerRoutes from './routes/poolers';
+import contractRoutes from './routes/contracts';
+import farmerRoutes from './routes/farmers';
+
+// Import rate limiting middleware
+import { logRateLimitHeaders } from './middleware/rateLimit';
+
 // Import centralized logger
 import { backendLogger as logger } from '../../Shared/utils/logger';
 
@@ -40,6 +49,9 @@ export const createServer = (): express.Application => {
   }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
+  
+  // Rate limiting headers logging
+  app.use(logRateLimitHeaders);
 
   // Request logging middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -97,6 +109,26 @@ export const createServer = (): express.Application => {
 // ======================
 
 const registerRoutes = (app: express.Application): void => {
+
+  // ======================
+  // NEW API ENDPOINTS (SRS SPECIFICATION)
+  // ======================
+  
+  // Authentication endpoints
+  app.use('/auth', authRoutes);
+  
+  // Pooler discovery and management
+  app.use('/poolers', poolerRoutes);
+  
+  // Contract management
+  app.use('/contracts', contractRoutes);
+  
+  // Farmer analytics
+  app.use('/farmers', farmerRoutes);
+
+  // ======================
+  // LEGACY/HEALTH ENDPOINTS
+  // ======================
 
   // Health check endpoint
   app.get('/health', async (req: Request, res: Response) => {
