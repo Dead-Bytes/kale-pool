@@ -33,6 +33,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient.getMe();
       setUser(response.user);
+      
+      // Update localStorage with latest user data
+      if (response.user) {
+        const user = response.user;
+        localStorage.setItem('kale-pool-user-id', user.id);
+        localStorage.setItem('kale-pool-user-email', user.email);
+        localStorage.setItem('kale-pool-user-role', user.role.toLowerCase());
+        
+        // Store farmer-specific ID if user is a farmer and farmer data exists
+        if (user.role.toLowerCase() === 'farmer' && user.farmer?.id) {
+          localStorage.setItem('kale-pool-farmer-id', user.farmer.id);
+        }
+        
+        // Store user status if available
+        if (user.status) {
+          localStorage.setItem('kale-pool-user-status', user.status);
+        }
+      }
     } catch (error) {
       console.error('Failed to get current user:', error);
       // Clear invalid token

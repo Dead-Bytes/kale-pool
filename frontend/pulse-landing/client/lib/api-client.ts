@@ -305,6 +305,30 @@ class APIClient {
     // Store the token if login is successful
     if (response.token) {
       localStorage.setItem('kale-pool-token', response.token);
+      
+      // Get user details from /auth/me after successful login
+      try {
+        const userDetails = await this.getMe();
+        if (userDetails.user) {
+          const user = userDetails.user;
+          // Store comprehensive user data
+          localStorage.setItem('kale-pool-user-id', user.id);
+          localStorage.setItem('kale-pool-user-email', user.email);
+          localStorage.setItem('kale-pool-user-role', user.role.toLowerCase());
+          
+          // Store farmer-specific ID if user is a farmer and farmer data exists
+          if (user.role.toLowerCase() === 'farmer' && user.farmer?.id) {
+            localStorage.setItem('kale-pool-farmer-id', user.farmer.id);
+          }
+          
+          // Store user status if available
+          if (user.status) {
+            localStorage.setItem('kale-pool-user-status', user.status);
+          }
+        }
+      } catch (error) {
+        console.warn('Could not fetch user details after login:', error);
+      }
     }
     
     return response;
@@ -313,6 +337,10 @@ class APIClient {
   logout(): void {
     localStorage.removeItem('kale-pool-token');
     localStorage.removeItem('kale-pool-user-id');
+    localStorage.removeItem('kale-pool-farmer-id');
+    localStorage.removeItem('kale-pool-user-email');
+    localStorage.removeItem('kale-pool-user-role');
+    localStorage.removeItem('kale-pool-user-status');
   }
 
   getStoredToken(): string | null {

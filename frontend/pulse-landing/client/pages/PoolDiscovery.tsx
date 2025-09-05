@@ -312,15 +312,9 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
     }
   });
 
-  // Convert hours to blocks (assuming 1 block ≈ 1 hour for KALE blockchain)
-  // Backend expects 1-20 blocks, so we'll cap the conversion appropriately
-  const convertHoursToBlocks = (hours: number): number => {
-    // Direct mapping for practical purposes:
-    // 6 hours -> 6 blocks
-    // 12 hours -> 12 blocks  
-    // 24 hours -> 20 blocks (capped at max)
-    // 48+ hours -> 20 blocks (capped at max)
-    return Math.min(hours, 20);
+  // Backend expects 1-20 blocks
+  const validateBlocks = (blocks: number): number => {
+    return Math.max(1, Math.min(blocks, 20));
   };
 
   const handleJoin = () => {
@@ -344,8 +338,8 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
       return;
     }
 
-    const hoursRequested = parseInt(harvestInterval);
-    const blocksToSend = convertHoursToBlocks(hoursRequested);
+    const blocksRequested = parseInt(harvestInterval);
+    const blocksToSend = validateBlocks(blocksRequested);
 
     joinPool.mutate({
       userId: currentUser.id,
@@ -426,11 +420,10 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="6">6 hours</SelectItem>
-                  <SelectItem value="12">12 hours</SelectItem>
-                  <SelectItem value="24">24 hours</SelectItem>
-                  <SelectItem value="48">48 hours</SelectItem>
-                  <SelectItem value="168">1 week</SelectItem>
+                  <SelectItem value="1">1 block</SelectItem>
+                  <SelectItem value="6">6 blocks</SelectItem>
+                  <SelectItem value="12">12 blocks</SelectItem>
+                  <SelectItem value="20">20 blocks (max)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -472,11 +465,11 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Stake:</span>
-                  <span>{joinResponse.stakePercentage}%</span>
+                  <span>{joinResponse.terms?.stakePercentage ?? '-'}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Harvest Interval:</span>
-                  <span>{joinResponse.harvestInterval}h</span>
+                  <span>{joinResponse.terms?.harvestInterval ?? '-'} blocks</span>
                 </div>
               </div>
             </div>

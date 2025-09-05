@@ -10,6 +10,7 @@ import {
 } from '../middleware/validation';
 import { UserRole } from '../types/auth-types';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { pool } from '../../../Shared/database/connection';
 
 const router = Router();
 
@@ -229,17 +230,61 @@ router.get('/me',
       // Get additional user permissions based on role
       const permissions = getUserPermissions(user.role);
       
+      // If user is a farmer, include farmer-specific data
+      let farmerData = null;
+      if (user.role === UserRole.FARMER) {
+        try {
+          // Get farmer data using the user ID
+          const farmerQuery = `
+            SELECT 
+              id,
+              user_id,
+              external_wallet,
+              funding_status,
+              last_funding_check,
+              created_at,
+              updated_at
+            FROM farmers 
+            WHERE user_id = $1
+          `;
+          const farmerResult = await pool.query(farmerQuery, [user.id]);
+          
+          if (farmerResult.rows.length > 0) {
+            const farmer = farmerResult.rows[0];
+            farmerData = {
+              id: farmer.id,
+              userId: farmer.user_id,
+              externalWallet: farmer.external_wallet,
+              fundingStatus: farmer.funding_status,
+              lastFundingCheck: farmer.last_funding_check,
+              createdAt: farmer.created_at,
+              updatedAt: farmer.updated_at
+            };
+          }
+        } catch (farmerError) {
+          logger.warn(`Could not fetch farmer data for user ${user.id}:`, farmerError);
+        }
+      }
+      
       logger.info(`User profile accessed: ${JSON.stringify({
         user_id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        has_farmer_data: !!farmerData
       })}`);
       
+      const responseData: any = {
+        ...user,
+        permissions
+      };
+      
+      // Include farmer data if available
+      if (farmerData) {
+        responseData.farmer = farmerData;
+      }
+      
       res.status(200).json({
-        user: {
-          ...user,
-          permissions
-        }
+        user: responseData
       });
       
     } catch (error) {
