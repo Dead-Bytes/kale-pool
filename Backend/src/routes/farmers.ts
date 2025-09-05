@@ -12,29 +12,247 @@ import { backendLogger as logger } from '../../../Shared/utils/logger';
 
 const router = Router();
 
-// GET /farmers - Get all farmers (admin only) or current user's farmer data
+// GET /farmers/current - Get current user's farmer data
+router.get('/current',
+  authenticate,
+  apiRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: userId } = req.user!;
+      
+      // Verify farmer association
+      const farmerAssociation = await farmerService.validateFarmerAssociation(userId);
+      if (!farmerAssociation) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'No farmer account associated with this user'
+          }
+        });
+      }
+      
+      // Return the specific farmer's data
+      const result = await farmerService.getFarmerById(farmerAssociation.farmerId);
+      if (!result) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'Farmer data not found'
+          }
+        });
+      }
+      
+      return res.json(result);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error in get current farmer:', { 
+        error: errorMessage,
+        userId: req.user?.id 
+      });
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch farmer data: ' + errorMessage
+        }
+      });
+    }
+  }
+);
+
+// GET /farmers - Get all farmers (admin only)
 router.get('/',
   authenticate,
   apiRateLimit,
   async (req: Request, res: Response) => {
     try {
-      logger.info(`Farmers list request: ${JSON.stringify({
-        user_id: req.user!.id,
-        user_role: req.user!.role,
-        ip: req.ip
-      })}`);
+      const { role } = req.user!;
       
-      if (req.user!.role === 'admin') {
-        // Admin can see all farmers
+      // Only admin can list all farmers
+      if (role !== 'admin') {
+        return res.status(403).json({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only admin can list all farmers'
+          }
+        });
+      }
+      
+      const result = await farmerService.getAllFarmers({
+        page: parseInt(req.query.page as string) || 1,
+        limit: Math.min(parseInt(req.query.limit as string) || 25, 100)
+      });
+      
+      return res.json(result);
+    } catch (error) {
+      logger.error('Error in list all farmers:', { 
+        error,
+        userId: req.user?.id 
+      });
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch farmers'
+        }
+      });
+    }
+  }
+);
+
+// GET /farmers/current - Get current user's farmer data
+router.get('/current',
+  authenticate,
+  apiRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: userId, role } = req.user!;
+      
+      // Verify farmer association
+      const farmerAssociation = await farmerService.validateFarmerAssociation(userId);
+      if (!farmerAssociation) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'No farmer account associated with this user'
+          }
+        });
+      }
+      
+      // Return the farmer data with active contract
+      const result = await farmerService.getFarmerById(farmerAssociation.farmerId);
+      if (!result) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'Farmer data not found'
+          }
+        });
+      }
+      return res.json(result);
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Error in get current farmer:', err);
+      if (req.user) {
+        logger.error(`Request from user ${req.user.id} failed`);
+      }
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch farmer data'
+        }
+      });
+    }
+  }
+);
+
+// GET /farmers/:farmerId - Get specific farmer data (admin or owner only)
+router.get('/:farmerId',
+  authenticate,
+  validateUUID('farmerId', 'params'),
+  handleValidationErrors,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: userId, role } = req.user!;
+      const requestedFarmerId = req.params.farmerId;
+      
+      // For non-admin users, verify they can access this farmer
+      if (role !== 'admin') {
+        const farmerAssociation = await farmerService.validateFarmerAssociation(userId);
+        if (!farmerAssociation || farmerAssociation.farmerId !== requestedFarmerId) {
+          return res.status(403).json({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You can only access your own farmer data'
+            }
+          });
+        }
+      }
+      
+      const farmer = await farmerService.getFarmerById(requestedFarmerId);
+      if (!farmer) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'Farmer not found'
+          }
+        });
+      }
+      
+      return res.json(farmer);
+    } catch (error) {
+      logger.error('Error in get farmer by id:', { 
+        error, 
+        userId: req.user?.id,
+        farmerId: req.params.farmerId 
+      });
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch farmer data'
+        }
+      });
+    }
+  }
+);
+
+// GET /farmers - List farmers (admin sees all, farmers see own data)
+router.get('/',
+  authenticate,
+  apiRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: userId, role } = req.user!;
+      
+      logger.info('Farmers list request', {
+        user_id: userId,
+        user_role: role,
+        ip: req.ip
+      });
+      
+      if (role === 'admin') {
+        // Admin can see all farmers with pagination
         const result = await farmerService.getAllFarmers({
           page: parseInt(req.query.page as string) || 1,
           limit: Math.min(parseInt(req.query.limit as string) || 25, 100)
         });
-        res.status(200).json(result);
-      } else if (req.user!.role === 'farmer') {
+        return res.status(200).json(result);
+      } 
+      
+      if (role === 'farmer') {
+        // For farmers, verify their farmer association first
+        const farmerData = await farmerService.validateFarmerAssociation(userId);
+        if (!farmerData) {
+          return res.status(404).json({
+            error: {
+              code: 'FARMER_NOT_FOUND',
+              message: 'No farmer account associated with this user'
+            }
+          });
+        }
+        
+        // Return the specific farmer's data with default 24h window
+        const result = await farmerService.getFarmerSummary({
+          farmerId: farmerData.farmerId,
+          window: '24h',
+          user: req.user!
+        });
+        return res.status(200).json(result);
+      }
+      
+      // Other roles are not allowed
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Access denied to farmer data'
+        },
+        timestamp: new Date().toISOString(),
+        path: req.path
+      });
+
+      if (req.user!.role === 'farmer') {
         // Farmer can only see their own data
         const result = await farmerService.getFarmerSummary({
-          farmerId: req.user!.entityId,
+          farmerId: req.user!.id,  // Use the user's ID directly
+          window: '24h',
           user: req.user!
         });
         res.status(200).json({ farmer: result });
@@ -48,10 +266,21 @@ router.get('/',
           path: req.path
         });
       }
+      }  catch (error) {
+      logger.error('Farmers list endpoint error', error as Error);
       
-    } catch (error) {
-      logger.error('Farmers list endpoint error', error as Error, {
-        user_id: req.user?.id
+      // Log request context for debugging
+      if (req.user) {
+        logger.error(`Request from user ${req.user.id} failed`);
+      }
+
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to get farmer data'
+        },
+        timestamp: new Date().toISOString(),
+        path: req.path
       });
       
       res.status(500).json({

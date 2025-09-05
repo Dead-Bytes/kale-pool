@@ -224,12 +224,32 @@ class APIClient {
 
   // ==================== Farmer Analytics APIs ====================
 
-  async getFarmerSummary(farmerId: string, window?: '24h' | '7d' | '30d' | 'all'): Promise<any> {
+  private validateAndGetFarmerId(providedFarmerId?: string): string {
+    const storedFarmerId = localStorage.getItem('kale-pool-farmer-id');
+    const farmerId = providedFarmerId || storedFarmerId;
+    
+    if (!farmerId) {
+      throw new APIClientError(400, 'FARMER_ID_MISSING', 'No farmer ID found in local storage');
+    }
+    
+    // If both exist, ensure they match (unless user has admin role)
+    if (storedFarmerId && providedFarmerId && storedFarmerId !== providedFarmerId) {
+      const userRole = localStorage.getItem('kale-pool-user-role');
+      if (userRole !== 'admin') {
+        throw new APIClientError(403, 'FORBIDDEN', 'You can only access your own farmer data');
+      }
+    }
+    
+    return farmerId;
+  }
+
+  async getFarmerSummary(farmerId?: string, window?: '24h' | '7d' | '30d' | 'all'): Promise<any> {
+    const validatedFarmerId = this.validateAndGetFarmerId(farmerId);
     const params = window ? `?window=${window}` : '';
-    return this.get<any>(`/farmers/${farmerId}/summary${params}`);
+    return this.get<any>(`/farmers/${validatedFarmerId}/summary${params}`);
   }
 
-  async getFarmerPlantings(farmerId: string, filters?: {
+  async getFarmerPlantings(farmerId?: string, filters?: {
     poolerId?: string;
     from?: string;
     to?: string;
@@ -237,6 +257,7 @@ class APIClient {
     limit?: number;
     status?: 'success' | 'failed' | 'all';
   }): Promise<any> {
+    const validatedFarmerId = this.validateAndGetFarmerId(farmerId);
     const params = new URLSearchParams();
     if (filters?.poolerId) params.append('poolerId', filters.poolerId);
     if (filters?.from) params.append('from', filters.from);
@@ -246,10 +267,10 @@ class APIClient {
     if (filters?.status) params.append('status', filters.status);
     
     const queryString = params.toString();
-    return this.get<any>(`/farmers/${farmerId}/plantings${queryString ? `?${queryString}` : ''}`);
+    return this.get<any>(`/farmers/${validatedFarmerId}/plantings${queryString ? `?${queryString}` : ''}`);
   }
 
-  async getFarmerHarvests(farmerId: string, filters?: {
+  async getFarmerHarvests(farmerId?: string, filters?: {
     poolerId?: string;
     from?: string;
     to?: string;
@@ -257,6 +278,7 @@ class APIClient {
     limit?: number;
     status?: 'success' | 'failed' | 'all';
   }): Promise<any> {
+    const validatedFarmerId = this.validateAndGetFarmerId(farmerId);
     const params = new URLSearchParams();
     if (filters?.poolerId) params.append('poolerId', filters.poolerId);
     if (filters?.from) params.append('from', filters.from);
@@ -266,7 +288,7 @@ class APIClient {
     if (filters?.status) params.append('status', filters.status);
     
     const queryString = params.toString();
-    return this.get<any>(`/farmers/${farmerId}/harvests${queryString ? `?${queryString}` : ''}`);
+    return this.get<any>(`/farmers/${validatedFarmerId}/harvests${queryString ? `?${queryString}` : ''}`);
   }
 
   // ==================== Authentication APIs ====================
@@ -290,7 +312,8 @@ class APIClient {
 
   // Get current farmer's data (authenticated endpoint)
   async getCurrentFarmer(): Promise<any> {
-    return this.get<any>('/farmers');
+    // We don't need to check farmerId here since /farmers/current will handle that
+    return this.get<any>(`/farmers/current`);
   }
 
   async registerFarmer(email: string, password: string, externalWallet: string): Promise<any> {
@@ -376,8 +399,9 @@ class APIClient {
 
   // ==================== Contract APIs ====================
 
-  async getFarmerActiveContract(farmerId: string): Promise<any> {
-    return this.get<any>(`/contracts/farmers/${farmerId}/contracts/active`);
+  async getFarmerActiveContract(farmerId?: string): Promise<any> {
+    const validatedFarmerId = this.validateAndGetFarmerId(farmerId);
+    return this.get<any>(`/contracts/farmers/${validatedFarmerId}/contracts/active`);
   }
 
   async getFarmerContracts(farmerId?: string, filters?: {

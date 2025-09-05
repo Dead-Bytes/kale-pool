@@ -42,6 +42,12 @@ interface PoolData {
     minStake: number;
     maxStake: number;
   };
+  contractTerms: {
+    rewardSplit: number;
+    platformFee: number;
+    exitDelay: number;
+    created_by: string;
+  };
   rewards: {
     totalEarned: number;
     pendingRewards: number;
@@ -97,46 +103,52 @@ export default function MyPool() {
 
   // Process data when available
   useEffect(() => {
-    if (farmerData?.farmer) {
+    if (farmerData?.farmer && farmerData?.active_contract) {
       const farmer = farmerData.farmer;
-      const contract = farmer.contract;
+      const contract = farmerData.active_contract;
       
       if (contract) {
         setPoolData({
           poolInfo: {
-            poolerId: contract.poolerId,
-            poolerName: contract.poolerName,
-            joinedAt: contract.joinedAt,
+            poolerId: contract.id,
+            poolerName: contract.contract_terms.pooler_name || "KALE Pool",
+            joinedAt: farmer.joined_pool_at || contract.created_at,
             status: contract.status,
             contractAddress: contract.id
           },
           stake: {
-            currentStake: parseFloat(farmer.current.balanceHuman || '0'),
-            stakePercentage: contract.stakePercentage,
-            totalPoolStake: parseFloat(farmer.lifetime.totalStakedHuman || '0'),
+            currentStake: parseFloat(farmer.current_balance || '0'),
+            stakePercentage: parseFloat(contract.stake_percentage || farmer.stake_percentage || '0'),
+            totalPoolStake: 0, // Will be available in pool stats
             minStake: 0, // Not available in current API
             maxStake: 100000 // Not available in current API
           },
           rewards: {
-            totalEarned: parseFloat(farmer.lifetime.totalRewardsHuman || '0'),
-            pendingRewards: parseFloat(farmer.current.lastRewardAmountHuman || '0'),
-            lastHarvest: farmer.current.lastRewardBlock ? new Date().toISOString() : null,
-            nextHarvest: null, // Not available in current API
-            harvestInterval: contract.harvestInterval
+            totalEarned: 0, // Will be tracked in separate rewards endpoint
+            pendingRewards: 0, // Will be tracked in separate rewards endpoint
+            lastHarvest: null,
+            nextHarvest: null,
+            harvestInterval: contract.harvest_interval || 20
           },
           performance: {
-            successRate: farmer.lifetime.successRate * 100, // Convert to percentage
-            blocksParticipated: farmer.lifetime.blocksParticipated,
-            avgRewardPerBlock: parseFloat(farmer.window.averageRewardPerBlock || '0'),
-            totalBlocks: farmer.lifetime.blocksParticipated,
-            uptime: 99.9 // Not available in current API
+            successRate: 100, // Initial value, will be updated with actual performance
+            blocksParticipated: 0,
+            avgRewardPerBlock: 0,
+            totalBlocks: 0,
+            uptime: 100 // Initial value, will be tracked
           },
           poolStats: {
-            totalFarmers: 0, // Not available in current API
-            activeFarmers: 0, // Not available in current API
-            poolSuccessRate: 95.0, // Not available in current API
-            avgBlockTime: 12.5, // Not available in current API
-            totalRewardsDistributed: 0 // Not available in current API
+            totalFarmers: 0, // Will be available in pool stats
+            activeFarmers: 0, // Will be available in pool stats
+            poolSuccessRate: 95.0,
+            avgBlockTime: 12.5,
+            totalRewardsDistributed: 0
+          },
+          contractTerms: {
+            rewardSplit: parseFloat(contract.reward_split || '0.05'),
+            platformFee: parseFloat(contract.platform_fee || '0.05'),
+            exitDelay: contract.contract_terms?.exit_delay || 24,
+            created_by: contract.contract_terms?.created_by || 'farmer_request'
           }
         });
       }
@@ -286,12 +298,48 @@ export default function MyPool() {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button onClick={handleExportEarnings}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
         </div>
       </div>
+
+      <div className="flex items-center justify-between">
+        <Button onClick={handleExportEarnings}>
+          <Download className="w-4 h-4 mr-2" />
+          Export
+        </Button>
+      </div>
+
+      {/* Active Contract Details */}
+      {poolData?.contractTerms && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Contract Terms
+            </CardTitle>
+            <CardDescription>Your active pool contract details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Reward Split</span>
+                <span className="text-xl font-semibold">{(poolData.contractTerms.rewardSplit * 100).toFixed(1)}%</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Platform Fee</span>
+                <span className="text-xl font-semibold">{(poolData.contractTerms.platformFee * 100).toFixed(1)}%</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Exit Delay</span>
+                <span className="text-xl font-semibold">{poolData.contractTerms.exitDelay} hours</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Created By</span>
+                <span className="text-xl font-semibold capitalize">{poolData.contractTerms.created_by.replace('_', ' ')}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pool Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
