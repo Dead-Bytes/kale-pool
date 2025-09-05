@@ -211,17 +211,7 @@ class APIClient {
   // ==================== Registration APIs ====================
 
   async registerUser(data: RegisterUserRequest): Promise<RegisterUserResponse> {
-    return this.post<RegisterUserResponse>('/register', data);
-  }
-
-  // Phase 1 farmer registration (for direct farmer registration)
-  async registerFarmerLegacy(data: any): Promise<any> {
-    return this.post<any>('/farmers/register', data);
-  }
-
-  // Phase 2 simple farmer registration (farmers table only)
-  async registerFarmerSimple(data: any): Promise<any> {
-    return this.post<any>('/register-farmer', data);
+    return this.post<RegisterUserResponse>('/register-farmer', data);
   }
 
   async checkFunding(data: CheckFundingRequest): Promise<CheckFundingResponse> {

@@ -6,7 +6,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout, RoleProvider } from "@/components/layout/app-layout";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ThemeToggleFloating } from "@/components/ui/theme-toggle";
-import { PlaceholderPage } from "@/components/layout/placeholder-page";
+
+// React Query
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Page imports
 import Dashboard from "./pages/Dashboard";
@@ -39,55 +41,60 @@ import {
   Pickaxe
 } from 'lucide-react';
 
+// ✅ Create a QueryClient instance
+const queryClient = new QueryClient();
+
 const App = () => (
-  <TooltipProvider>
-    <BrowserRouter>
-      <ThemeProvider>
-        <RoleProvider>
-          <ThemeToggleFloating />
-          <Routes>
-          {/* Public routes without AppLayout (no sidebar) */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/auth/signin" element={<SignIn />} />
-          <Route path="/auth/signup" element={<SignUp />} />
-          <Route path="/farmer/register" element={<FarmerRegistration />} />
-          <Route path="/farmer/wallet" element={<WalletRegistration />} />
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <BrowserRouter>
+        <ThemeProvider>
+          <RoleProvider>
+            <ThemeToggleFloating />
+            <Routes>
+              {/* Public routes without AppLayout (no sidebar) */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/auth/signin" element={<SignIn />} />
+              <Route path="/auth/signup" element={<SignUp />} />
+              <Route path="/farmer/register" element={<FarmerRegistration />} />
+              <Route path="/farmer/wallet" element={<WalletRegistration />} />
 
-          {/* App routes with layout (sidebar, header) */}
-          <Route element={<AppLayout />}>
-            {/* Main Dashboard */}
-            <Route path="/dashboard" element={<Dashboard />} />
+              {/* App routes with layout (sidebar, header) */}
+              <Route element={<AppLayout />}>
+                {/* Main Dashboard */}
+                <Route path="/dashboard" element={<Dashboard />} />
 
-            {/* Network Status */}
-            <Route path="/network" element={<NetworkStatus />} />
+                {/* Network Status */}
+                <Route path="/network" element={<NetworkStatus />} />
 
-            {/* Farmer Routes */}
-            <Route path="/farmer/pools" element={<PoolDiscovery />} />
-            <Route path="/farmer/my-pool" element={<MyPool />} />
-            <Route path="/farmer/work-history" element={<WorkHistory />} />
+                {/* Farmer Routes */}
+                <Route path="/farmer/pools" element={<PoolDiscovery />} />
+                <Route path="/farmer/my-pool" element={<MyPool />} />
+                <Route path="/farmer/work-history" element={<WorkHistory />} />
 
-            {/* Pooler Routes */}
-            <Route path="/pooler/blocks" element={<PoolerConsole />} />
-            <Route path="/pooler/status" element={<PoolerStatus />} />
-            <Route path="/pooler/farmers" element={<ManageFarmers />} />
+                {/* Pooler Routes */}
+                <Route path="/pooler/blocks" element={<PoolerConsole />} />
+                <Route path="/pooler/status" element={<PoolerStatus />} />
+                <Route path="/pooler/farmers" element={<ManageFarmers />} />
 
-            {/* Block Operations Routes */}
-            <Route path="/operations/plant" element={<BlockOperations />} />
-            <Route path="/operations/work" element={<BlockOperations />} />
-            <Route path="/operations/harvest" element={<BlockOperations />} />
+                {/* Block Operations Routes */}
+                <Route path="/operations/plant" element={<BlockOperations />} />
+                <Route path="/operations/work" element={<BlockOperations />} />
+                <Route path="/operations/harvest" element={<BlockOperations />} />
 
-            {/* Analytics Routes */}
-            <Route path="/analytics/performance" element={<PerformanceAnalytics />} />
-            <Route path="/analytics/work" element={<WorkHistory />} />
-          </Route>
+                {/* Analytics Routes */}
+                <Route path="/analytics/performance" element={<PerformanceAnalytics />} />
+                <Route path="/analytics/work" element={<WorkHistory />} />
+              </Route>
 
-          {/* Catch-all route */}
-          <Route path="*" element={<NotFound />} />
-          </Routes>
-        </RoleProvider>
-      </ThemeProvider>
-    </BrowserRouter>
-  </TooltipProvider>
+              {/* Catch-all route */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </RoleProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 createRoot(document.getElementById("root")!).render(<App />);
