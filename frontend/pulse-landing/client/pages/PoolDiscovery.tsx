@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePoolers, usePoolerDetails, useJoinPool, useConfirmJoin } from '@/hooks/use-api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -276,6 +277,7 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
   const [joinResponse, setJoinResponse] = useState<any>(null);
   
   const { toast } = useToast();
+  const { user: currentUser, isLoading: userLoading, isAuthenticated } = useAuth();
   
   const joinPool = useJoinPool({
     onSuccess: (data) => {
@@ -310,24 +312,40 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
     }
   });
 
+  // Backend expects 1-20 blocks
+  const validateBlocks = (blocks: number): number => {
+    return Math.max(1, Math.min(blocks, 20));
+  };
+
   const handleJoin = () => {
     if (!poolerId) return;
     
-    const userId = localStorage.getItem('kale-pool-user-id');
-    if (!userId) {
+    if (userLoading) {
       toast({
-        title: 'Registration Required',
-        description: 'Please complete farmer registration first.',
+        title: 'Loading',
+        description: 'Please wait while we verify your authentication.',
+        variant: 'default'
+      });
+      return;
+    }
+    
+    if (!isAuthenticated || !currentUser?.id) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please log in first.',
         variant: 'destructive'
       });
       return;
     }
 
+    const blocksRequested = parseInt(harvestInterval);
+    const blocksToSend = validateBlocks(blocksRequested);
+
     joinPool.mutate({
-      userId,
+      userId: currentUser.id,
       poolerId,
       stakePercentage: stakePercentage[0] / 100, // Convert percentage to decimal
-      harvestInterval: parseInt(harvestInterval)
+      harvestInterval: blocksToSend
     });
   };
 
@@ -402,11 +420,10 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="6">6 hours</SelectItem>
-                  <SelectItem value="12">12 hours</SelectItem>
-                  <SelectItem value="24">24 hours</SelectItem>
-                  <SelectItem value="48">48 hours</SelectItem>
-                  <SelectItem value="168">1 week</SelectItem>
+                  <SelectItem value="1">1 block</SelectItem>
+                  <SelectItem value="6">6 blocks</SelectItem>
+                  <SelectItem value="12">12 blocks</SelectItem>
+                  <SelectItem value="20">20 blocks (max)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -448,11 +465,11 @@ function JoinPoolModal({ poolerId, open, onOpenChange, onSuccess }: {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Stake:</span>
-                  <span>{joinResponse.stakePercentage}%</span>
+                  <span>{joinResponse.terms?.stakePercentage ?? '-'}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Harvest Interval:</span>
-                  <span>{joinResponse.harvestInterval}h</span>
+                  <span>{joinResponse.terms?.harvestInterval ?? '-'} blocks</span>
                 </div>
               </div>
             </div>

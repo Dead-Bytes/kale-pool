@@ -63,22 +63,20 @@ export default function WorkHistory() {
   const [workHistory, setWorkHistory] = useState<WorkHistoryItem[]>([]);
   const [farmerStats, setFarmerStats] = useState<FarmerStats[]>([]);
 
-  const currentFarmerId = (typeof window !== 'undefined' && localStorage.getItem('kale-pool-farmer-id')) || '';
-
-  // API hooks
+  // API hooks - farmerId is now optional in the hooks since the API client handles it
   const { 
     data: farmerSummary, 
     isLoading: summaryLoading, 
     error: summaryError,
     refetch: refetchSummary 
-  } = useFarmerSummary(currentFarmerId, timeRange as '24h' | '7d' | '30d' | 'all');
+  } = useFarmerSummary(undefined, timeRange as '24h' | '7d' | '30d' | 'all');
 
   const { 
     data: plantingsData, 
     isLoading: plantingsLoading, 
     error: plantingsError,
     refetch: refetchPlantings 
-  } = useFarmerPlantings(currentFarmerId, {
+  } = useFarmerPlantings(undefined, {
     status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
     poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
     page: 1,
@@ -90,7 +88,7 @@ export default function WorkHistory() {
     isLoading: harvestsLoading, 
     error: harvestsError,
     refetch: refetchHarvests 
-  } = useFarmerHarvests(currentFarmerId, {
+  } = useFarmerHarvests(undefined, {
     status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
     poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
     page: 1,

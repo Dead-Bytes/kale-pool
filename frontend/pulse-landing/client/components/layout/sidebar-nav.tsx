@@ -10,23 +10,15 @@ import { useLogout } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Activity,
   BarChart3,
-  ChevronDown,
   Construction,
   Database,
   HardHat,
@@ -175,11 +167,10 @@ const navigation: NavSection[] = [
 
 interface SidebarNavProps {
   currentRole: 'farmer' | 'pooler' | 'admin';
-  onRoleChange: (role: 'farmer' | 'pooler' | 'admin') => void;
   collapsed?: boolean;
 }
 
-export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: SidebarNavProps) {
+export function SidebarNav({ currentRole, collapsed = false }: SidebarNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useLogout({
@@ -191,6 +182,7 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
       navigate('/');
     }
   });
+
 
   const filteredNavigation = navigation.filter(section => 
     !section.roles || section.roles.includes(currentRole)
@@ -213,38 +205,6 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
         </div>
       </div>
 
-      {/* Role Selector */}
-      <div className="p-4 border-b border-sidebar-border">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full justify-between" size={collapsed ? 'icon' : 'default'}>
-              {!collapsed && (
-                <>
-                  <span className="capitalize">{currentRole}</span>
-                  <ChevronDown className="w-4 h-4" />
-                </>
-              )}
-              {collapsed && <Settings className="w-4 h-4" />}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onRoleChange('farmer')}>
-              <Wallet className="w-4 h-4 mr-2" />
-              Farmer
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRoleChange('pooler')}>
-              <Database className="w-4 h-4 mr-2" />
-              Pooler
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRoleChange('admin')}>
-              <Settings className="w-4 h-4 mr-2" />
-              Admin
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -316,6 +276,7 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
                   {currentRole === 'admin' && 'System Admin'}
                 </p>
               </div>
+
             </div>
             <Button
               variant="ghost"
@@ -340,6 +301,7 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
           >
             <LogOut className="w-4 h-4" />
           </Button>
+
         )}
       </div>
     </div>

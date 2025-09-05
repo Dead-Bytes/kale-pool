@@ -260,6 +260,17 @@ export function useHarvest(
 
 // ==================== Utility Hooks ====================
 
+// ==================== Authentication Hooks ====================
+
+export function useCurrentUser(options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['current-user'],
+    queryFn: () => apiClient.getMe(),
+    staleTime: 30000,
+    ...options,
+  });
+}
+
 // ==================== Farmer Analytics Hooks ====================
 
 export function useCurrentFarmer(options?: UseQueryOptions<any, APIClientError>) {
@@ -271,7 +282,7 @@ export function useCurrentFarmer(options?: UseQueryOptions<any, APIClientError>)
   });
 }
 
-export function useFarmerSummary(farmerId: string, window?: '24h' | '7d' | '30d' | 'all', options?: UseQueryOptions<any, APIClientError>) {
+export function useFarmerSummary(farmerId?: string, window?: '24h' | '7d' | '30d' | 'all', options?: UseQueryOptions<any, APIClientError>) {
   return useQuery({
     queryKey: ['farmer-summary', farmerId, window],
     queryFn: () => apiClient.getFarmerSummary(farmerId, window),
@@ -281,7 +292,7 @@ export function useFarmerSummary(farmerId: string, window?: '24h' | '7d' | '30d'
   });
 }
 
-export function useFarmerPlantings(farmerId: string, filters?: {
+export function useFarmerPlantings(farmerId?: string, filters?: {
   poolerId?: string;
   from?: string;
   to?: string;
@@ -298,7 +309,7 @@ export function useFarmerPlantings(farmerId: string, filters?: {
   });
 }
 
-export function useFarmerHarvests(farmerId: string, filters?: {
+export function useFarmerHarvests(farmerId?: string, filters?: {
   poolerId?: string;
   from?: string;
   to?: string;

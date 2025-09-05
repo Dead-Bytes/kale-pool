@@ -3,7 +3,8 @@ import "./global.css";
 import { createRoot } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AppLayout, RoleProvider } from "@/components/layout/app-layout";
+import { AppLayout } from "@/components/layout/app-layout";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ThemeToggleFloating } from "@/components/ui/theme-toggle";
 
@@ -49,7 +50,7 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <ThemeProvider>
-          <RoleProvider>
+          <AuthProvider>
             <ThemeToggleFloating />
             <Routes>
               {/* Public routes without AppLayout (no sidebar) */}
@@ -90,7 +91,7 @@ const App = () => (
               {/* Catch-all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </RoleProvider>
+          </AuthProvider>
         </ThemeProvider>
       </BrowserRouter>
     </TooltipProvider>
