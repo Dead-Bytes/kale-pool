@@ -22,7 +22,7 @@ export class AuthService {
   
   async register(request: RegisterRequest): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
     try {
-      const { email, password, role = UserRole.FARMER, entityId } = request;
+      const { email, password, role = UserRole.FARMER, entityId, externalWallet } = request;
       
       // Check if user already exists
       const existingUser = await this.getUserByEmail(email);
@@ -56,7 +56,7 @@ export class AuthService {
       `, [
         userId,
         email,
-        'pending', // Will be updated when they provide wallet
+        externalWallet || 'pending', // Use provided wallet or pending
         'registered',
         passwordHash,
         role,

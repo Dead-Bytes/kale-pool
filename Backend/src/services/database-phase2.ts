@@ -62,13 +62,14 @@ export class UserQueries {
 
   async createUser(
     email: string,
+    password: string,
     externalWallet: string
   ): Promise<string> {
     const result = await this.db.query(
-      `INSERT INTO users (email, external_wallet, status) 
-       VALUES ($1, $2, 'registered') 
+      `INSERT INTO users (email, password_hash, external_wallet, status) 
+       VALUES ($1, $2, $3, 'registered') 
        RETURNING id`,
-      [email, externalWallet]
+      [email, password, externalWallet]
     );
     
     return result.rows[0].id;
@@ -90,6 +91,13 @@ export class UserQueries {
     );
     
     return result.rows[0] || null;
+  }
+
+  async deleteUserById(userId: string): Promise<void> {
+    await this.db.query(
+      'DELETE FROM users WHERE id = $1',
+      [userId]
+    );
   }
 
   async updateUserStatus(

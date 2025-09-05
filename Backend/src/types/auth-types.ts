@@ -23,6 +23,7 @@ export interface RegisterRequest {
   password: string;
   role?: UserRole;
   entityId?: string;
+  externalWallet?: string;
 }
 
 export interface LoginResponse {

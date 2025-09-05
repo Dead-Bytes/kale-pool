@@ -3,24 +3,25 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { plantService } from './services/plant-service';
 import { workService } from './services/work-service';
 import { harvestService } from './services/harvest-service';
 import { automatedHarvestService } from './services/automated-harvest-service';
-import { stellarWalletManager } from './services/wallet-manager';
+import { stellarWalletManager, type WalletKeypair } from './services/wallet-manager';
 import { initializeDatabase } from './services/database';
 import Config from '../../Shared/config';
+import { farmerQueriesPhase2, userQueries } from './services/database-phase2';
 
 // Import Phase 2 routes
 import { 
-  registerUser, 
   checkFunding, 
   getUserStatus, 
   getAvailablePoolers, 
   getPoolerDetails,
   joinPool,
-  confirmPoolJoin,
-  registerPooler
+  confirmPoolJoin
 } from './routes/registration-routes';
 
 // Import new API routes
@@ -224,60 +225,149 @@ const registerRoutes = (app: express.Application): void => {
   // PHASE 2: FARMER ONBOARDING ROUTES
   // ======================
 
-  // User registration (original - has users table dependency)
-  app.post('/register', registerUser);
-
-  // Simple farmer registration (farmers table only)
+  // Unified farmer registration (handles both users and farmers tables)
   app.post('/register-farmer', async (req: Request, res: Response) => {
     try {
-      const { email, externalWallet } = req.body;
+      const { email, password, externalWallet } = req.body;
 
-      if (!email || !externalWallet) {
+      if (!email || !password || !externalWallet) {
         return res.status(400).json({
           error: 'MISSING_FIELDS',
-          message: 'Email and external wallet address are required'
+          message: 'Email, password, and external wallet address are required'
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await userQueries.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({
+          error: 'USER_EXISTS',
+          message: 'A user with this email already exists'
+        });
+      }
+
+      // Hash the password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Create user with external wallet and hashed password
+      const newUserId = await userQueries.createUser(email, hashedPassword, externalWallet);
+      if (!newUserId) {
+        return res.status(500).json({
+          error: 'USER_CREATION_FAILED',
+          message: 'Failed to create user record'
         });
       }
 
       // Generate custodial wallet
-      const walletGeneration = await stellarWalletManager.generateCustodialWallet();
-      
-      if (!walletGeneration.success) {
+      let wallet: WalletKeypair;
+      try {
+        const walletResult = await stellarWalletManager.generateCustodialWallet();
+        if (!walletResult.success || !walletResult.publicKey || !walletResult.secretKey) {
+          // Clean up by removing the user record since wallet generation failed
+          await userQueries.deleteUserById(newUserId);
+          return res.status(500).json({
+            error: 'WALLET_GENERATION_FAILED',
+            message: 'Failed to generate custodial wallet'
+          });
+        }
+        wallet = {
+          publicKey: walletResult.publicKey,
+          secretKey: walletResult.secretKey
+        };
+      } catch (error) {
+        // Clean up by removing the user record since wallet generation failed
+        await userQueries.deleteUserById(newUserId);
         return res.status(500).json({
           error: 'WALLET_GENERATION_FAILED',
           message: 'Failed to generate custodial wallet'
         });
       }
 
-      // Import farmer queries from original database service
-      const { farmerQueries } = await import('./services/database');
+      // Create farmer record
+      try {
+        const farmerId = await farmerQueriesPhase2.createFarmerWithUser(
+          newUserId,
+          wallet.publicKey,
+          wallet.secretKey,
+          externalWallet
+        );
+
+        // Generate JWT token for the new user
+        const token = jwt.sign(
+          { userId: newUserId, farmerId: farmerId },
+          Config.BACKEND.JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        return res.status(201).json({
+          success: true,
+          message: 'Farmer registered successfully',
+          data: {
+            userId: newUserId,
+            farmerId: farmerId,
+            token
+          }
+        });
+      } catch (error) {
+        // If farmer creation fails, clean up the user record
+        await userQueries.deleteUserById(newUserId);
+        return res.status(500).json({
+          error: 'REGISTRATION_FAILED',
+          message: 'Failed to register farmer'
+        });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      // Create user with proper external wallet
+      const { db } = await import('./services/database');
+      const userId = await db.query(`
+        INSERT INTO users (email, external_wallet, status, password_hash, role)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `, [email, externalWallet, 'registered', passwordHash, 'farmer']).then(res => res.rows[0].id);
       
-      // Create farmer directly
-      const farmerId = await farmerQueries.createFarmer(
-        Config.POOLER.ID,
-        walletGeneration.publicKey!,
-        walletGeneration.secretKey!,
-        externalWallet,
-        0.1 // default stake percentage
+      // Create farmer record
+      const farmerId = await farmerQueriesPhase2.createFarmerWithUser(
+        userId,
+        wallet.publicKey,
+        wallet.secretKey,
+        externalWallet
       );
 
-      logger.info(`Simple farmer registration successful ${JSON.stringify({
+      // Generate JWT token
+      const token = jwt.sign({
+        userId,
+        email,
+        role: 'farmer',
+        entityId: farmerId
+      }, Config.BACKEND.JWT_SECRET, {
+        expiresIn: Config.BACKEND.JWT_EXPIRES_IN
+      });
+
+      logger.info(`Unified farmer registration successful ${JSON.stringify({
+        user_id: userId,
         farmer_id: farmerId,
         email,
-        custodial_wallet: walletGeneration.publicKey
+        custodial_wallet: wallet.publicKey
       })}`);
 
       res.status(201).json({
+        userId,
         farmerId,
         email,
-        custodialWallet: walletGeneration.publicKey,
-        status: 'created',
-        message: 'Farmer registration successful. Please fund your custodial wallet with XLM.',
+        custodialWallet: wallet.publicKey,
+        token,
+        role: 'farmer',
+        status: 'wallet_created',
+        message: 'Registration successful. Please fund your custodial wallet with XLM.',
         createdAt: new Date().toISOString()
       });
 
     } catch (error) {
-      logger.error('Simple farmer registration error', error as Error);
+      logger.error('Unified farmer registration error', error as Error);
       res.status(500).json({
         error: 'REGISTRATION_FAILED',
         message: 'Failed to register farmer'
