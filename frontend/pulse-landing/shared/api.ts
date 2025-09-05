@@ -44,6 +44,7 @@ export interface InfoResponse {
 
 export interface RegisterUserRequest {
   email: string;
+  password: string;
   externalWallet: string;
 }
 

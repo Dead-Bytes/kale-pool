@@ -34,6 +34,7 @@ import {
 
 interface RegistrationFormData {
   email: string;
+  password: string;
   externalWallet: string;
 }
 
@@ -173,6 +174,7 @@ function FundingStatus({ userId }: { userId: string }) {
 function RegistrationForm({ onRegistrationComplete }: { onRegistrationComplete: (userId: string, response: any) => void }) {
   const [formData, setFormData] = useState<RegistrationFormData>({
     email: '',
+    password: '',
     externalWallet: ''
   });
   const [errors, setErrors] = useState<Partial<RegistrationFormData>>({});
@@ -193,6 +195,14 @@ function RegistrationForm({ onRegistrationComplete }: { onRegistrationComplete: 
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      newErrors.password = 'Password must contain uppercase, lowercase, and number';
     }
 
     if (!formData.externalWallet) {
@@ -238,6 +248,24 @@ function RegistrationForm({ onRegistrationComplete }: { onRegistrationComplete: 
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email}</p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Enter a strong password"
+              value={formData.password}
+              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+              className={errors.password ? 'border-destructive' : ''}
+            />
+            {errors.password && (
+              <p className="text-sm text-destructive">{errors.password}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Must be at least 8 characters with uppercase, lowercase, and number
+            </p>
           </div>
 
           <div className="space-y-2">
