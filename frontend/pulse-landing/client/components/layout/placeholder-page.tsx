@@ -29,7 +29,7 @@ export function PlaceholderPage({
           <Button variant="ghost" asChild>
             <Link to="/">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+              Back
             </Link>
           </Button>
         </div>
@@ -84,7 +84,7 @@ export function PlaceholderPage({
         {/* Action Buttons */}
         <div className="flex gap-3">
           <Button asChild>
-            <Link to="/">Go to Dashboard</Link>
+            <Link to="/">Go to Landing</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link to="/auth/signup">Start with Registration</Link>

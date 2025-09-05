@@ -305,9 +305,28 @@ class APIClient {
     return response;
   }
 
-  logout(): void {
+  async logout(): Promise<any> {
+    try {
+      const response = await this.post<any>('/auth/logout', {});
+      // Clear local storage after successful logout
+      this.clearLocalStorage();
+      return response;
+    } catch (error) {
+      // Clear local storage even if logout fails
+      this.clearLocalStorage();
+      throw error;
+    }
+  }
+
+  clearLocalStorage(): void {
     localStorage.removeItem('kale-pool-token');
     localStorage.removeItem('kale-pool-user-id');
+    localStorage.removeItem('kale-pool-user-response');
+    localStorage.removeItem('kale-pool-farmer-id');
+    localStorage.removeItem('kale-pool-user-email');
+    localStorage.removeItem('kale-pool-custodial-wallet');
+    localStorage.removeItem('kale-pool-user-role');
+    localStorage.removeItem('kale-pool-user-status');
   }
 
   getStoredToken(): string | null {

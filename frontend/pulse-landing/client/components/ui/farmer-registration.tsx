@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Shield, ArrowRight, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useRegisterUser } from '@/hooks/use-api';
 import { useToast } from '@/hooks/use-toast';
@@ -51,7 +51,6 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
   onSignIn,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [isDark, setIsDark] = useState(false);
   const [formData, setFormData] = useState<RegistrationFormData>({
     email: '',
     password: '',
@@ -68,20 +67,6 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
       console.error('Registration failed:', error);
     }
   });
-
-  useEffect(() => {
-    const saved = localStorage.getItem('kale-theme');
-    const dark = saved === 'dark';
-    setIsDark(dark);
-    document.documentElement.classList.toggle('dark', dark);
-  }, []);
-
-  const toggleTheme = () => {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    localStorage.setItem('kale-theme', next ? 'dark' : 'light');
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Partial<RegistrationFormData> = {};
@@ -127,15 +112,6 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8 bg-[linear-gradient(135deg,_#f8fafc_0%,_#eef2f7_100%)] dark:bg-[linear-gradient(135deg,_#121212_0%,_#171717_100%)]">
-      {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        className="fixed right-4 top-4 z-50 rounded-full border border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/60 px-3 py-2 text-xs text-black dark:text-white shadow-sm hover:bg-white dark:hover:bg-black"
-        aria-label="Toggle theme"
-      >
-        {isDark ? 'Light mode' : 'Dark mode'}
-      </button>
-
       {/* Centered registration card */}
       <div className="w-full max-w-md">
         <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl">

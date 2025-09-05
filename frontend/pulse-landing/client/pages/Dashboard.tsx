@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useHealth, useInfo } from '@/hooks/use-api';
+import { useNavigate } from 'react-router-dom';
+import { useHealth, useInfo, useLogout } from '@/hooks/use-api';
 import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import {
   Database,
   Globe,
   Leaf,
+  LogOut,
   Network,
   Pickaxe,
   RefreshCw,
@@ -230,8 +232,20 @@ interface HarvestRecord {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
   const { data: info, isLoading: infoLoading, error: infoError } = useInfo();
+  const logout = useLogout({
+    onSuccess: () => {
+      // Navigate to landing page after successful logout
+      navigate('/');
+    },
+    onError: (error) => {
+      console.error('Logout failed:', error);
+      // Still navigate to landing page even if logout fails
+      navigate('/');
+    }
+  });
   const [uptime, setUptime] = useState(0);
   const [farmerStatus, setFarmerStatus] = useState<FarmerStatus | null>(null);
   const [farmerLoading, setFarmerLoading] = useState(false);
@@ -393,15 +407,27 @@ export default function Dashboard() {
             Monitor your KALE Pool coordination system health and performance
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => refetchHealth()}
-          disabled={healthLoading}
-        >
-          <RefreshCw className={cn("w-4 h-4 mr-2", healthLoading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => refetchHealth()}
+            disabled={healthLoading}
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", healthLoading && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            <LogOut className={cn("w-4 h-4 mr-2", logout.isPending && "animate-spin")} />
+            {logout.isPending ? 'Signing out...' : 'Sign Out'}
+          </Button>
+        </div>
       </div>
 
       {/* Error States */}

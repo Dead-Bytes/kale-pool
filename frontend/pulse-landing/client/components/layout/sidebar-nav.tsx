@@ -4,8 +4,9 @@
  */
 
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useLogout } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -31,7 +32,7 @@ import {
   HardHat,
   Home,
   Leaf,
-  
+  LogOut,
   Network,
   Pickaxe,
   Settings,
@@ -180,7 +181,16 @@ interface SidebarNavProps {
 
 export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: SidebarNavProps) {
   const location = useLocation();
-  
+  const navigate = useNavigate();
+  const logout = useLogout({
+    onSuccess: () => {
+      navigate('/');
+    },
+    onError: (error) => {
+      console.error('Logout failed:', error);
+      navigate('/');
+    }
+  });
 
   const filteredNavigation = navigation.filter(section => 
     !section.roles || section.roles.includes(currentRole)
@@ -287,25 +297,49 @@ export function SidebarNav({ currentRole, onRoleChange, collapsed = false }: Sid
       <div className="p-4 border-t border-sidebar-border space-y-2">
         {/* User Profile */}
         {!collapsed && (
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
-            <Avatar className="w-8 h-8">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                {currentRole[0].toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">
-                {currentRole === 'farmer' && 'Farmer User'}
-                {currentRole === 'pooler' && 'Pool Operator'}
-                {currentRole === 'admin' && 'Administrator'}
-              </p>
-              <p className="text-xs text-sidebar-foreground/60">
-                {currentRole === 'farmer' && 'Stake & Harvest'}
-                {currentRole === 'pooler' && 'Coordinate Pools'}
-                {currentRole === 'admin' && 'System Admin'}
-              </p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {currentRole[0].toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  {currentRole === 'farmer' && 'Farmer User'}
+                  {currentRole === 'pooler' && 'Pool Operator'}
+                  {currentRole === 'admin' && 'Administrator'}
+                </p>
+                <p className="text-xs text-sidebar-foreground/60">
+                  {currentRole === 'farmer' && 'Stake & Harvest'}
+                  {currentRole === 'pooler' && 'Coordinate Pools'}
+                  {currentRole === 'admin' && 'System Admin'}
+                </p>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout.mutate()}
+              disabled={logout.isPending}
+              className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              {logout.isPending ? 'Signing out...' : 'Sign Out'}
+            </Button>
           </div>
+        )}
+        {collapsed && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            className="w-full justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         )}
       </div>
     </div>

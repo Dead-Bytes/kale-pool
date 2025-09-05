@@ -95,6 +95,21 @@ export function useRegisterUser(
   });
 }
 
+export function useLogout(
+  options?: UseMutationOptions<any, APIClientError, void>
+) {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: () => apiClient.logout(),
+    onSuccess: () => {
+      // Clear all cached data on logout
+      queryClient.clear();
+    },
+    ...options,
+  });
+}
+
 export function useCheckFunding(
   userId: string,
   options?: UseQueryOptions<CheckFundingResponse, APIClientError>

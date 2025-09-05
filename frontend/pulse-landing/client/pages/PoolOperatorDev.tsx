@@ -155,9 +155,9 @@ export default function PoolOperatorDev() {
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button asChild variant="outline" className="border-[#95c697] text-[#95c697] hover:bg-[#95c697] hover:text-white">
-            <Link to="/dashboard">
+            <Link to="/">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+              Back
             </Link>
           </Button>
           <Button asChild className="bg-[#95c697] hover:bg-[#95c697]/90 text-white">
