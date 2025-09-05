@@ -28,14 +28,14 @@ import { useFarmerSummary, useFarmerPlantings, useFarmerHarvests } from '@/hooks
 // Work history data will be fetched from API
 interface WorkHistoryItem {
   id: string;
-  farmerId: string;
   blockIndex: number;
-  nonce: string;
   status: 'success' | 'failed' | 'pending';
-  reward: string;
+  amount: string;
   timestamp: string;
   poolerId: string;
-  processingTime: number;
+  poolerName: string;
+  type: 'planting' | 'harvest';
+  transactionHash?: string;
 }
 
 interface WorkStats {
@@ -43,7 +43,7 @@ interface WorkStats {
   successRate: number;
   avgProcessingTime: number;
   totalRewards: number;
-  activeFarmers: number;
+  activePools: number;
   peakHour: string;
   topFarmer: string;
 }
@@ -118,35 +118,35 @@ export default function WorkHistory() {
       const combinedHistory: WorkHistoryItem[] = [];
       
       // Add plantings as work submissions
-      if (plantingsData.plantings) {
-        plantingsData.plantings.forEach((planting: any) => {
+      if (plantingsData.items) {
+        plantingsData.items.forEach((planting: any) => {
           combinedHistory.push({
-            id: planting.id || `planting-${planting.blockIndex}`,
-            farmerId: planting.farmerId || currentFarmerId,
+            id: planting.id,
             blockIndex: planting.blockIndex,
-            nonce: planting.nonce || 'N/A',
             status: planting.status === 'success' ? 'success' : 'failed',
-            reward: planting.reward || '0',
-            timestamp: planting.timestamp || planting.createdAt,
-            poolerId: planting.poolerId || 'Unknown',
-            processingTime: planting.processingTime || 0
+            amount: planting.stakeAmountHuman || '0',
+            timestamp: planting.plantedAt,
+            poolerId: planting.poolerId,
+            poolerName: planting.poolerName,
+            type: 'planting',
+            transactionHash: planting.transactionHash
           });
         });
       }
 
       // Add harvests as work completions
-      if (harvestsData.harvests) {
-        harvestsData.harvests.forEach((harvest: any) => {
+      if (harvestsData.items) {
+        harvestsData.items.forEach((harvest: any) => {
           combinedHistory.push({
-            id: harvest.id || `harvest-${harvest.blockIndex}`,
-            farmerId: harvest.farmerId || currentFarmerId,
+            id: harvest.id,
             blockIndex: harvest.blockIndex,
-            nonce: harvest.nonce || 'N/A',
             status: harvest.status === 'success' ? 'success' : 'failed',
-            reward: harvest.reward || '0',
-            timestamp: harvest.timestamp || harvest.createdAt,
-            poolerId: harvest.poolerId || 'Unknown',
-            processingTime: harvest.processingTime || 0
+            amount: harvest.rewardAmountHuman || '0',
+            timestamp: harvest.harvestedAt,
+            poolerId: harvest.poolerId,
+            poolerName: harvest.poolerName,
+            type: 'harvest',
+            transactionHash: harvest.transactionHash
           });
         });
       }
@@ -158,11 +158,10 @@ export default function WorkHistory() {
   }, [plantingsData, harvestsData, currentFarmerId]);
 
   const filteredWorkHistory = workHistory
-    .filter(work => (currentFarmerId ? work.farmerId === currentFarmerId : true))
     .filter(work => {
-    const matchesSearch = work.farmerId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         work.blockIndex.toString().includes(searchTerm) ||
-                         work.nonce.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = work.blockIndex.toString().includes(searchTerm) ||
+                         work.poolerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         work.poolerId.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || work.status === statusFilter;
     const matchesPooler = poolerFilter === 'all' || work.poolerId === poolerFilter;
     
@@ -200,7 +199,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   (farmerSummary?.totalSubmissions || workHistory.length).toLocaleString()}
+                   (farmerSummary?.lifetime?.blocksParticipated || workHistory.length).toLocaleString()}
                 </p>
               </div>
               <HardHat className="w-8 h-8 text-primary" />
@@ -215,7 +214,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   `${farmerSummary?.successRate || 0}%`}
+                   `${farmerSummary?.lifetime?.successRate || 0}%`}
                 </p>
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
@@ -230,7 +229,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Avg Processing</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   `${farmerSummary?.avgProcessingTime || 0}s`}
+                   `N/A`}
                 </p>
               </div>
               <Clock className="w-8 h-8 text-warning" />
@@ -245,7 +244,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Total Rewards</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-20" /> : 
-                   (farmerSummary?.totalRewards || 0).toLocaleString()}
+                   (farmerSummary?.lifetime?.totalRewardsHuman || '0')}
                 </p>
               </div>
               <TrendingUp className="w-8 h-8 text-success" />
@@ -260,7 +259,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Active Pools</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   farmerSummary?.activePools || 0}
+                   farmerSummary?.contract ? 1 : 0}
                 </p>
               </div>
               <Users className="w-8 h-8 text-primary" />
@@ -275,7 +274,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Peak Hour</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   farmerSummary?.peakHour || 'N/A'}
+                   'N/A'}
                 </p>
               </div>
               <BarChart3 className="w-8 h-8 text-warning" />
@@ -383,13 +382,12 @@ export default function WorkHistory() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Farmer ID</TableHead>
                       <TableHead>Block Index</TableHead>
-                      <TableHead>Nonce</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Reward</TableHead>
+                      <TableHead>Amount</TableHead>
                       <TableHead>Pooler</TableHead>
-                      <TableHead>Processing Time</TableHead>
+                      <TableHead>Transaction</TableHead>
                       <TableHead>Timestamp</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -397,22 +395,24 @@ export default function WorkHistory() {
                     {isLoading ? (
                       Array.from({ length: 5 }).map((_, index) => (
                         <TableRow key={index}>
-                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                           <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                           <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                         </TableRow>
                       ))
                     ) : filteredWorkHistory.length > 0 ? (
                       filteredWorkHistory.map((work) => (
                         <TableRow key={work.id}>
-                          <TableCell className="font-mono text-sm">{work.farmerId}</TableCell>
                           <TableCell className="font-mono">{work.blockIndex}</TableCell>
-                          <TableCell className="font-mono text-sm">{work.nonce}</TableCell>
+                          <TableCell>
+                            <Badge variant={work.type === 'planting' ? 'secondary' : 'default'}>
+                              {work.type === 'planting' ? 'Planting' : 'Harvest'}
+                            </Badge>
+                          </TableCell>
                           <TableCell>
                             <Badge variant={work.status === 'success' ? 'default' : 'destructive'}>
                               {work.status === 'success' ? (
@@ -423,11 +423,15 @@ export default function WorkHistory() {
                               {work.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-mono">{work.reward}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{work.poolerId}</Badge>
+                          <TableCell className="font-mono">
+                            {work.amount}
                           </TableCell>
-                          <TableCell>{work.processingTime}s</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{work.poolerName}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {work.transactionHash ? `${work.transactionHash.slice(0, 8)}...` : 'N/A'}
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {new Date(work.timestamp).toLocaleString()}
                           </TableCell>
@@ -435,7 +439,7 @@ export default function WorkHistory() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <div className="flex flex-col items-center gap-2">
                             <HardHat className="w-8 h-8 text-muted-foreground" />
                             <p className="text-muted-foreground">No work history found</p>

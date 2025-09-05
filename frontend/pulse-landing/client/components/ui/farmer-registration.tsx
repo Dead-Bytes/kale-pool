@@ -126,7 +126,7 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row w-full bg-[linear-gradient(135deg,_#f8fafc_0%,_#eef2f7_100%)] dark:bg-[linear-gradient(135deg,_#121212_0%,_#171717_100%)]">
+    <div className="min-h-screen flex items-center justify-center p-8 bg-[linear-gradient(135deg,_#f8fafc_0%,_#eef2f7_100%)] dark:bg-[linear-gradient(135deg,_#121212_0%,_#171717_100%)]">
       {/* Theme toggle */}
       <button
         onClick={toggleTheme}
@@ -136,12 +136,12 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
         {isDark ? 'Light mode' : 'Dark mode'}
       </button>
 
-      {/* Left column: registration form */}
-      <section className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
+      {/* Centered registration card */}
+      <div className="w-full max-w-md">
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl">
           <div className="flex flex-col gap-6">
-            <h1 className="text-4xl md:text-5xl font-semibold leading-tight text-foreground">{title}</h1>
-            <p className="text-muted-foreground">{description}</p>
+            <h1 className="text-4xl md:text-5xl font-semibold leading-tight text-foreground text-center">{title}</h1>
+            <p className="text-muted-foreground text-center">{description}</p>
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               {/* Email Field */}
@@ -258,21 +258,7 @@ export const FarmerRegistrationPage: React.FC<FarmerRegistrationPageProps> = ({
             </button>
           </div>
         </div>
-      </section>
-
-      {/* Right column: hero image + testimonials */}
-      {heroImageSrc && (
-        <section className="hidden md:block flex-1 relative p-4">
-          <div className="absolute inset-4 rounded-3xl bg-cover bg-center" style={{ backgroundImage: `url(${heroImageSrc})` }}></div>
-          {testimonials.length > 0 && (
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 px-8 w-full justify-center">
-              <TestimonialCard testimonial={testimonials[0]} delay="" />
-              {testimonials[1] && <div className="hidden xl:flex"><TestimonialCard testimonial={testimonials[1]} delay="" /></div>}
-              {testimonials[2] && <div className="hidden 2xl:flex"><TestimonialCard testimonial={testimonials[2]} delay="" /></div>}
-            </div>
-          )}
-        </section>
-      )}
+      </div>
     </div>
   );
 };
