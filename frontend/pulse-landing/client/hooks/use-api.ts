@@ -282,6 +282,16 @@ export function useCurrentFarmer(options?: UseQueryOptions<any, APIClientError>)
   });
 }
 
+export function useFarmerBlockchainData(options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['farmer-blockchain-data'],
+    queryFn: () => apiClient.getFarmerBlockchainData(),
+    staleTime: 10000, // 10 seconds - blockchain data changes frequently
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    ...options,
+  });
+}
+
 export function useFarmerSummary(farmerId?: string, window?: '24h' | '7d' | '30d' | 'all', options?: UseQueryOptions<any, APIClientError>) {
   return useQuery({
     queryKey: ['farmer-summary', farmerId, window],

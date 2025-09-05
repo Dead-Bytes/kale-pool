@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useHealth, useInfo, useLogout } from '@/hooks/use-api';
+import { useHealth, useInfo, useLogout, useFarmerBlockchainData } from '@/hooks/use-api';
 import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,10 @@ import {
   Wallet,
   XCircle,
   Zap,
+  Coins,
+  Shield,
+  TrendingUp,
+  Hash,
 } from 'lucide-react';
 
 // Mock recent activity data - in real app this would come from API
@@ -235,6 +239,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
   const { data: info, isLoading: infoLoading, error: infoError } = useInfo();
+  const { data: blockchainData, isLoading: blockchainLoading, error: blockchainError, refetch: refetchBlockchain } = useFarmerBlockchainData();
   const logout = useLogout({
     onSuccess: () => {
       // Navigate to landing page after successful logout
@@ -298,9 +303,9 @@ export default function Dashboard() {
   // Fetch farmer analytics data
   useEffect(() => {
     const fetchFarmerAnalytics = async () => {
-      const userId = localStorage.getItem('kale-pool-user-id');
-      if (!userId) {
-        setAnalyticsError('No user ID found. Please register first.');
+      const farmerId = localStorage.getItem('kale-pool-farmer-id');
+      if (!farmerId) {
+        setAnalyticsError('No farmer ID found. Please register first.');
         return;
       }
 
@@ -309,11 +314,11 @@ export default function Dashboard() {
       
       try {
         // Fetch farmer summary
-        const summary = await apiClient.getFarmerSummary(userId, '7d');
+        const summary = await apiClient.getFarmerSummary(farmerId, '7d');
         setFarmerSummary(summary);
 
         // Fetch planting history
-        const plantings = await apiClient.getFarmerPlantings(userId, { 
+        const plantings = await apiClient.getFarmerPlantings(farmerId, { 
           page: 1, 
           limit: 10, 
           status: 'all' 
@@ -321,7 +326,7 @@ export default function Dashboard() {
         setPlantingHistory(plantings.plantings || []);
 
         // Fetch harvest history
-        const harvests = await apiClient.getFarmerHarvests(userId, { 
+        const harvests = await apiClient.getFarmerHarvests(farmerId, { 
           page: 1, 
           limit: 10, 
           status: 'all' 
@@ -457,35 +462,17 @@ export default function Dashboard() {
             </Alert>
           )}
           
+          {blockchainError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertDescription>
+                Failed to load blockchain data: {blockchainError.message}
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "p-2 rounded-full",
-                    farmerStatus?.isFunded ? 'bg-success/10' : 'bg-warning/10'
-                  )}>
-                    <Wallet className={cn(
-                      "w-4 h-4",
-                      farmerStatus?.isFunded ? 'text-success' : 'text-warning'
-                    )} />
-                  </div>
-                  <div>
-                    <p className="font-medium">Wallet Status</p>
-                    <div className="text-sm text-muted-foreground">
-                      {farmerLoading ? (
-                        <Skeleton className="h-4 w-16" />
-                      ) : farmerStatus?.isFunded ? (
-                        'Funded'
-                      ) : (
-                        'Needs Funding'
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
+            {/* Custodial Wallet Public Address */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -493,14 +480,14 @@ export default function Dashboard() {
                     <Wallet className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">Current Balance</p>
-                    {farmerLoading ? (
+                    <p className="font-medium">Custodial Wallet</p>
+                    {blockchainLoading ? (
                       <div className="text-sm text-muted-foreground">
-                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-32" />
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {farmerStatus ? `${formatBalance(farmerStatus.currentBalance)} XLM` : 'N/A'}
+                      <p className="text-sm text-muted-foreground font-mono">
+                        {blockchainData?.custodialWallet?.address ? blockchainData.custodialWallet.address.substring(0, 12) + '...' : 'Loading...'}
                       </p>
                     )}
                   </div>
@@ -508,21 +495,46 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Wallet Balance (XLM and KALE) */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-success/10 rounded-full">
+                    <Coins className="w-4 h-4 text-success" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Balance</p>
+                    {blockchainLoading ? (
+                      <div className="text-sm text-muted-foreground">
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        <p>{blockchainData?.custodialWallet?.xlmBalance ? `${blockchainData.custodialWallet.xlmBalance.toFixed(2)} XLM` : 'N/A XLM'}</p>
+                        <p>{blockchainData?.custodialWallet?.balance ? `${blockchainData.custodialWallet.balance.toFixed(2)} KALE` : 'N/A KALE'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Latest Block Index */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-accent/10 rounded-full">
-                    <Network className="w-4 h-4 text-accent" />
+                    <Hash className="w-4 h-4 text-accent" />
                   </div>
                   <div>
-                    <p className="font-medium">Pool Status</p>
-                    {farmerLoading ? (
+                    <p className="font-medium">Block Index</p>
+                    {blockchainLoading ? (
                       <div className="text-sm text-muted-foreground">
                         <Skeleton className="h-4 w-16" />
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {farmerStatus?.poolContract ? 'Active' : 'Not Joined'}
+                        {blockchainData?.currentBlock?.height ? `#${blockchainData.currentBlock.height.toLocaleString()}` : 'N/A'}
                       </p>
                     )}
                   </div>
@@ -530,21 +542,22 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Total KALE Staked */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-chart-2/10 rounded-full">
-                    <Leaf className="w-4 h-4 text-chart-2" />
+                    <TrendingUp className="w-4 h-4 text-chart-2" />
                   </div>
                   <div>
-                    <p className="font-medium">Stake Percentage</p>
-                    {farmerLoading ? (
+                    <p className="font-medium">Total Staked</p>
+                    {blockchainLoading ? (
                       <div className="text-sm text-muted-foreground">
-                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-20" />
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        {farmerStatus?.poolContract ? formatStakePercentage(farmerStatus.poolContract.stakePercentage) : 'N/A'}
+                        {blockchainData?.staking?.totalStaked ? `${blockchainData.staking.totalStaked.toFixed(2)} KALE` : 'N/A'}
                       </p>
                     )}
                   </div>
@@ -800,6 +813,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
       </Tabs>
     </div>
   );

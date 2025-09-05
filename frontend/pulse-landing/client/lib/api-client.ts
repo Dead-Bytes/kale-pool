@@ -316,6 +316,11 @@ class APIClient {
     return this.get<any>(`/farmers/current`);
   }
 
+  // Get current farmer's blockchain data (authenticated endpoint)
+  async getFarmerBlockchainData(): Promise<any> {
+    return this.get<any>('/farmers/blockchain-data');
+  }
+
   async registerFarmer(email: string, password: string, externalWallet: string): Promise<any> {
     const response = await this.post<any>('/register-farmer', {
       email,
