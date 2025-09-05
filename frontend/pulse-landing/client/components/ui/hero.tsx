@@ -51,8 +51,16 @@ export default function Globe3D() {
             >
               Get Started
             </Link>
-            <a
-              href="#how-it-works"
+            <button
+              onClick={() => {
+                const element = document.getElementById('how-it-works');
+                if (element) {
+                  element.scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                  });
+                }
+              }}
               className="flex w-full items-center justify-center gap-2 text-white/70 transition-colors hover:text-white sm:w-auto"
             >
               <span>Learn how it works</span>
@@ -69,7 +77,7 @@ export default function Globe3D() {
               >
                 <path d="m6 9 6 6 6-6"></path>
               </svg>
-            </a>
+            </button>
           </div>
         </motion.div>
         <motion.div

@@ -17,18 +17,28 @@ export default function FAQs() {
         },
         {
             id: 'item-3',
-            question: 'Can I run this on my own infrastructure?',
-            answer: 'Yes. We support hosted and self-hosted deployments. Pooler and Backend services are designed for reliability and observability.',
+            question: 'What is a custodial wallet and why do I need one?',
+            answer: 'A custodial wallet is a secure Stellar wallet we create for you that automatically signs transactions on your behalf. You need it because KALE mining requires frequent transactions (planting, harvesting) that would be impossible to do manually. Instead of you signing each transaction, our system handles everything automatically using your custodial wallet.',
         },
         {
             id: 'item-4',
-            question: 'What networks are supported?',
-            answer: 'KALE on Stellar/Soroban. We integrate with the Stellar SDK and expose production-ready health/info endpoints.',
+            question: 'How does the custodial wallet work?',
+            answer: 'We create a secure Stellar wallet with public/private keypair, encrypt and store the private key in our database, and automatically sign all your KALE transactions (planting, harvesting, staking). You never need to manage keys or sign transactions manually - everything happens automatically in the background.',
         },
         {
             id: 'item-5',
-            question: 'Is the system auditable?',
-            answer: 'Yes. The platform is auditable by design with immutable logs and an event-sourced database for full traceability.',
+            question: 'Is my custodial wallet secure?',
+            answer: 'Yes. Your private keys are encrypted and stored securely in our database. We never share your private keys, and you can withdraw your funds anytime. The custodial wallet is like having a trusted assistant that handles all your KALE transactions while you focus on earning rewards.',
+        },
+        {
+            id: 'item-6',
+            question: 'How much XLM should I put in my custodial wallet?',
+            answer: '⚠️ IMPORTANT: Only deposit the minimum XLM required for transaction fees (typically 0.5-1 XLM). Do NOT deposit large amounts of XLM into your custodial wallet. XLM is only used for paying Stellar network transaction fees, not for earning rewards. Your KALE tokens are what generate rewards, and they should be kept in your main wallet until you\'re ready to stake them.',
+        },
+        {
+            id: 'item-7',
+            question: 'What networks are supported?',
+            answer: 'KALE Pool currently supports KALE tokens on the Stellar blockchain using Soroban smart contracts. This means you can mine KALE tokens directly on Stellar\'s fast, low-cost network. We\'re built on Stellar\'s proven infrastructure, so you get reliable performance and minimal transaction fees.',
         },
     ]
 
@@ -42,8 +52,7 @@ export default function FAQs() {
 
                 <div className="mx-auto mt-12 max-w-xl">
                     <Accordion
-                        type="single"
-                        collapsible
+                        type="multiple"
                         className="bg-white/5 ring-white/10 w-full rounded-2xl border border-white/10 px-8 py-3 shadow-sm ring-4">
                         {faqItems.map((item) => (
                             <AccordionItem
@@ -60,14 +69,6 @@ export default function FAQs() {
                         ))}
                     </Accordion>
 
-                    <p className="text-white/70 mt-6 px-8">
-                        Can't find what you're looking for? Contact our{' '}
-                        <Link
-                            to="/dashboard"
-                            className="text-[#95c697] font-medium hover:underline">
-                            support team
-                        </Link>
-                    </p>
                 </div>
             </div>
         </section>
