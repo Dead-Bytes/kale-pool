@@ -19,8 +19,6 @@ COPY ext ./ext/
 RUN bun install --production
 
 # Copy source code
-COPY Backend/src ./Backend/src/
-COPY Backend/tsconfig.json ./Backend/
 COPY start-backend.ts ./
 
 # Build the application

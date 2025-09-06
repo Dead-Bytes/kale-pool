@@ -4,8 +4,8 @@
   "description": "KALE Pool Mining System - Complete mining pool infrastructure",
   "main": "start.ts",
   "scripts": {
-    "start": "bun run start.ts",
-    "dev": "bun run start.ts",
+    "start": "bun run src/server-phase2.ts",
+    "dev": "bun run src/server-phase2.ts",
     "start:backend": "bun run start-backend.ts",
     "db:setup": " bun run db:migrate",
     "build": "bun build src/server-phase2.ts --outdir=dist --target=bun",
