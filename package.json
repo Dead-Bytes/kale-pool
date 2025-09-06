@@ -7,9 +7,6 @@
     "start": "bun run start.ts",
     "dev": "bun run start.ts",
     "start:backend": "bun run start-backend.ts",
-    "start:pooler": "bun run start-pooler.ts", 
-    "pooler": "bun run start-pooler.ts",
-    "backend": "cd Backend && bun run dev",
     "db:setup": "cd Backend && bun run db:migrate",
     "build": "cd Backend && bun run build",
     "test": "cd Backend && bun test",
@@ -30,8 +27,7 @@
     "node": ">=18.0.0"
   },
   "workspaces": [
-    "Backend",
-    "Pooler"
+    "Backend"
   ],
   "devDependencies": {
     "bun-types": "latest",
