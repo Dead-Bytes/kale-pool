@@ -8,7 +8,7 @@
     "dev": "bun run start.ts",
     "start:backend": "bun run start-backend.ts",
     "db:setup": " bun run db:migrate",
-    "build": "bun build start-backend.ts --outdir=dist --target=bun",
+    "build": "bun build src/server-phase2.ts --outdir=dist --target=bun",
     "test": " bun test",
     "lint": "bun run lint"
   },

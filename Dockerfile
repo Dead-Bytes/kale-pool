@@ -12,12 +12,11 @@ RUN apk add --no-cache \
 
 # Copy package files
 COPY package.json bun.lock ./
-COPY Backend/package.json ./Backend/
 COPY Shared ./Shared/
 COPY ext ./ext/
 
 # Install dependencies
-RUN cd Backend && bun install --production
+RUN bun install --production
 
 # Copy source code
 COPY Backend/src ./Backend/src/
