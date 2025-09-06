@@ -362,6 +362,33 @@ export function useFarmerContracts(farmerId?: string, filters?: {
   });
 }
 
+export function useContractById(contractId?: string, options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['contract', contractId],
+    queryFn: () => apiClient.getContractById(contractId!),
+    enabled: !!contractId,
+    staleTime: 30000,
+    ...options,
+  });
+}
+
+export function useExitContract(
+  options?: UseMutationOptions<any, APIClientError, string>
+) {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (contractId: string) => apiClient.exitContract(contractId),
+    onSuccess: () => {
+      // Invalidate contract-related queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['farmer-active-contract'] });
+      queryClient.invalidateQueries({ queryKey: ['farmer-contracts'] });
+      queryClient.invalidateQueries({ queryKey: ['contract'] });
+    },
+    ...options,
+  });
+}
+
 // ==================== Wallet Hooks ====================
 
 export function useWalletBalance(address?: string, options?: UseQueryOptions<any, APIClientError>) {

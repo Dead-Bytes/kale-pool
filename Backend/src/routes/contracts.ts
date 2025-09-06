@@ -256,4 +256,84 @@ router.get('/poolers/:poolerId/contracts',
   }
 );
 
+// POST /contracts/:contractId/exit - Request contract exit
+router.post('/:contractId/exit',
+  authenticate,
+  apiRateLimit,
+  validateUUID('contractId'),
+  handleValidationErrors,
+  async (req: Request, res: Response) => {
+    try {
+      const contractId = req.params.contractId;
+      
+      logger.info(`Contract exit request: ${JSON.stringify({
+        contract_id: contractId,
+        user_id: req.user!.id,
+        user_role: req.user!.role
+      })}`);
+      
+      const result = await contractService.requestContractExit(contractId, req.user!);
+      
+      res.status(200).json({
+        message: 'Contract exit requested successfully',
+        contract: result.contract,
+        finalRewards: result.finalRewards,
+        exitDelay: result.exitDelay,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      if ((error as Error).message.includes('Access denied')) {
+        res.status(403).json({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Access denied to exit this contract'
+          },
+          timestamp: new Date().toISOString(),
+          path: req.path
+        });
+        return;
+      }
+      
+      if ((error as Error).message.includes('Contract not found')) {
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Contract not found'
+          },
+          timestamp: new Date().toISOString(),
+          path: req.path
+        });
+        return;
+      }
+      
+      if ((error as Error).message.includes('not active')) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_STATUS',
+            message: 'Only active contracts can be exited'
+          },
+          timestamp: new Date().toISOString(),
+          path: req.path
+        });
+        return;
+      }
+      
+      logger.error('Contract exit endpoint error', error as Error, {
+        contract_id: req.params.contractId,
+        user_id: req.user?.id
+      });
+      
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to process contract exit request'
+        },
+        timestamp: new Date().toISOString(),
+        path: req.path
+      });
+    }
+  }
+);
+
 export default router;

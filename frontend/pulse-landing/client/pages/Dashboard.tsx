@@ -41,36 +41,7 @@ import {
   Hash,
 } from 'lucide-react';
 
-// Mock recent activity data - in real app this would come from API
-const mockRecentActivity = [
-  {
-    id: '1',
-    type: 'plant',
-    blockIndex: 12345,
-    poolerId: 'pool-abc123',
-    farmers: 15,
-    timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-    status: 'success',
-  },
-  {
-    id: '2',
-    type: 'work',
-    blockIndex: 12344,
-    poolerId: 'pool-abc123',
-    submissions: 8,
-    timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-    status: 'success',
-  },
-  {
-    id: '3',
-    type: 'harvest',
-    blockIndex: 12343,
-    poolerId: 'pool-xyz789',
-    rewards: 1250.5,
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    status: 'success',
-  },
-];
+// Recent activity will be populated from real API data
 
 function ServiceStatusCard({ title, status, lastCheck, responseTime, error }: {
   title: string;
@@ -118,7 +89,102 @@ function ServiceStatusCard({ title, status, lastCheck, responseTime, error }: {
   );
 }
 
-function RecentActivityCard() {
+function RecentActivityCard({ 
+  plantingsData, 
+  harvestsData, 
+  plantingsLoading, 
+  harvestsLoading 
+}: {
+  plantingsData?: any;
+  harvestsData?: any;
+  plantingsLoading?: boolean;
+  harvestsLoading?: boolean;
+}) {
+
+  // Combine and process recent activity from real API data
+  const recentActivity = (() => {
+    const activities: any[] = [];
+    
+    // Debug logging
+    console.log('RecentActivityCard Debug:', {
+      plantingsData,
+      harvestsData,
+      plantingsLoading,
+      harvestsLoading
+    });
+    
+    // Add plantings
+    const plantings = plantingsData?.items || plantingsData?.plantings || [];
+    console.log('Plantings found:', plantings.length, plantings);
+    
+    if (plantings.length > 0) {
+      plantings.slice(0, 3).forEach((planting: any) => {
+        const stakeAmount = planting.stakeAmountHuman || planting.stakeAmount || '0';
+        activities.push({
+          id: `plant-${planting.id}`,
+          type: 'plant',
+          blockIndex: planting.blockIndex || 'Unknown',
+          poolerId: planting.poolerId,
+          poolerName: planting.poolerName,
+          description: stakeAmount !== '0' && stakeAmount !== '0.0000000' 
+            ? `Staked ${parseFloat(stakeAmount).toFixed(4)} XLM` 
+            : `Planted for Block #${planting.blockIndex}`,
+          timestamp: new Date(planting.plantedAt || Date.now()),
+          status: planting.status || 'unknown',
+        });
+      });
+    }
+    
+    // Add harvests
+    const harvests = harvestsData?.items || harvestsData?.harvests || [];
+    if (harvests.length > 0) {
+      harvests.slice(0, 3).forEach((harvest: any) => {
+        activities.push({
+          id: `harvest-${harvest.id}`,
+          type: 'harvest',
+          blockIndex: harvest.blockIndex || 'Unknown',
+          poolerId: harvest.poolerId,
+          description: `${parseFloat(harvest.amount || '0').toFixed(1)} XLM harvested`,
+          timestamp: new Date(harvest.harvestedAt || Date.now()),
+          status: harvest.status || 'unknown',
+        });
+      });
+    }
+    
+    // Sort by timestamp (newest first) and limit to 3 items
+    const sortedActivities = activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 3);
+    
+    console.log('Final activities:', sortedActivities);
+    return sortedActivities;
+  })();
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'plant':
+        return Leaf;
+      case 'harvest':
+        return Truck;
+      default:
+        return Activity;
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'success':
+      case 'completed':
+        return <Badge variant="secondary">Success</Badge>;
+      case 'pending':
+        return <Badge variant="outline">Pending</Badge>;
+      case 'failed':
+        return <Badge variant="destructive">Failed</Badge>;
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -132,41 +198,60 @@ function RecentActivityCard() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {mockRecentActivity.map((activity) => {
-            const icons = {
-              plant: Leaf,
-              work: Pickaxe,
-              harvest: Truck,
-            };
-            const Icon = icons[activity.type as keyof typeof icons];
-
-            return (
-              <div key={activity.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
-                <div className="p-2 bg-primary/10 rounded-full">
-                  <Icon className="w-4 h-4 text-primary" />
+          {plantingsLoading || harvestsLoading ? (
+            // Loading state
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
+                <Skeleton className="w-8 h-8 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-48" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{activity.type}</span>
-                    <span className="text-sm text-muted-foreground">
-                      Block #{activity.blockIndex}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {activity.type === 'plant' && `${activity.farmers} farmers planted`}
-                    {activity.type === 'work' && `${activity.submissions} work submissions`}
-                    {activity.type === 'harvest' && `${activity.rewards} XLM harvested`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <Badge variant="secondary">Success</Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {activity.timestamp.toLocaleTimeString()}
-                  </p>
+                <div className="text-right space-y-1">
+                  <Skeleton className="h-6 w-16" />
+                  <Skeleton className="h-3 w-12" />
                 </div>
               </div>
-            );
-          })}
+            ))
+          ) : recentActivity.length > 0 ? (
+            // Show real activity data
+            recentActivity.map((activity) => {
+              const Icon = getActivityIcon(activity.type);
+              return (
+                <div key={activity.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <Icon className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium capitalize">{activity.type}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Block #{activity.blockIndex}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {activity.description}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {getStatusBadge(activity.status)}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {activity.timestamp.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            // Empty state
+            <div className="text-center py-8">
+              <Activity className="w-8 h-8 mx-auto text-muted-foreground mb-3" />
+              <h3 className="font-medium mb-1">No Recent Activity</h3>
+              <p className="text-sm text-muted-foreground">
+                Activity will appear here once you start farming.
+              </p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -598,7 +683,12 @@ export default function Dashboard() {
           </div>
 
           {/* Recent Activity */}
-          <RecentActivityCard />
+          <RecentActivityCard 
+            plantingsData={plantingsData}
+            harvestsData={harvestsData}
+            plantingsLoading={plantingsLoading}
+            harvestsLoading={harvestsLoading}
+          />
         </TabsContent>
 
         <TabsContent value="stakes" className="space-y-6">

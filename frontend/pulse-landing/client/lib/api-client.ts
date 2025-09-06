@@ -439,6 +439,14 @@ class APIClient {
     return this.get<any>(`/contracts?${params.toString()}`);
   }
 
+  async getContractById(contractId: string): Promise<any> {
+    return this.get<any>(`/contracts/${contractId}`);
+  }
+
+  async exitContract(contractId: string): Promise<any> {
+    return this.post<any>(`/contracts/${contractId}/exit`, {});
+  }
+
   // ==================== Wallet APIs ====================
 
   async getWalletBalance(address: string): Promise<any> {

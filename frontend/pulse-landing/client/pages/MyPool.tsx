@@ -6,6 +6,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { 
   Leaf, 
   TrendingUp, 
@@ -23,8 +32,9 @@ import {
   Activity
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
-import { useUserStatus, useCurrentFarmer, useFarmerPlantings, useFarmerHarvests } from '@/hooks/use-api';
+import { useUserStatus, useCurrentFarmer, useFarmerPlantings, useFarmerHarvests, useExitContract, useFarmerActiveContract } from '@/hooks/use-api';
 import { Link } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 // Interfaces for type safety
 interface PoolData {
@@ -92,14 +102,60 @@ export default function MyPool() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const [exitRewards, setExitRewards] = useState<any>(null);
 
   // Get user ID and token from localStorage
   const userId = localStorage.getItem('kale-pool-user-id');
   const token = localStorage.getItem('kale-pool-token');
+  const { toast } = useToast();
   
   // Fetch user status and farmer data
   const { data: userStatus, isLoading: userStatusLoading, error: userStatusError } = useUserStatus(userId || '');
   const { data: farmerData, isLoading: farmerLoading, error: farmerError } = useCurrentFarmer();
+  
+  // Exit contract functionality
+  const exitContractMutation = useExitContract({
+    onSuccess: (data) => {
+      console.log('Exit contract success:', data);
+      setExitRewards(data.finalRewards);
+      setShowExitDialog(false);
+      
+      const rewards = data.finalRewards;
+      const totalRewards = (rewards?.totalRewards || 0) + (rewards?.pendingStakeAmount || 0);
+      const rewardCount = (rewards?.successfulHarvests || 0) + (rewards?.successfulPlantings || 0);
+      
+      toast({
+        title: "🎉 Pool Exit Requested Successfully!",
+        description: (
+          <div className="space-y-2">
+            <p>Your exit request has been submitted. Contract status: <strong>"exiting"</strong></p>
+            <div className="bg-green-50 border border-green-200 rounded p-2 mt-2">
+              <p className="font-semibold text-green-800">💰 Rewards on the way:</p>
+              <p className="text-sm text-green-700">
+                • Total Rewards: <strong>{totalRewards.toFixed(4)} XLM</strong>
+              </p>
+              <p className="text-sm text-green-700">
+                • Reward Count: <strong>{rewardCount} operations</strong>
+              </p>
+              <p className="text-xs text-green-600 mt-1">
+                ⏱️ Available after {data.exitDelay || 24} hour delay period
+              </p>
+            </div>
+          </div>
+        ),
+        duration: 8000, // Show for 8 seconds since there's more info
+      });
+    },
+    onError: (error) => {
+      console.error('Exit contract failed:', error);
+      toast({
+        title: "Exit Failed", 
+        description: error.message || "Failed to exit pool. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
   
   // Fetch plantings and harvests for recent activity
   const { data: plantingsData, isLoading: plantingsLoading } = useFarmerPlantings();
@@ -206,6 +262,13 @@ export default function MyPool() {
 
   const handleExportEarnings = () => {
     console.log('Exporting earnings data...');
+  };
+
+  const handleExitPool = () => {
+    const contractId = poolData?.poolInfo.contractAddress || farmerData?.active_contract?.id;
+    if (contractId) {
+      exitContractMutation.mutate(contractId);
+    }
   };
 
   const getActivityIcon = (type: string) => {
@@ -709,11 +772,77 @@ export default function MyPool() {
                 <div className="p-4 border rounded-lg border-destructive/20">
                   <h3 className="font-medium mb-2 text-destructive">Danger Zone</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Leave the pool or make irreversible changes
+                    Exit your pool contract and receive your final rewards
                   </p>
-                  <Button variant="destructive" size="sm">
-                    Leave Pool
-                  </Button>
+                  
+                  <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="destructive" size="sm" disabled={!poolData?.poolInfo.contractAddress && !farmerData?.active_contract?.id}>
+                        Exit Pool
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Exit Pool Contract</DialogTitle>
+                        <DialogDescription>
+                          Are you sure you want to exit the pool? This action cannot be undone.
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="space-y-4">
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <h4 className="font-medium mb-3 text-blue-800">💰 Expected Rewards Summary</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-blue-700">Total Rewards:</span>
+                              <span className="font-medium text-blue-900">
+                                {farmerData?.farmer?.current_balance ? 
+                                  parseFloat(farmerData.farmer.current_balance).toFixed(4) : '0.0000'} XLM
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-blue-700">Successful Harvests:</span>
+                              <span className="font-medium text-blue-900">
+                                {exitRewards?.successfulHarvests || 'Loading...'} operations
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-blue-700">Successful Plantings:</span>
+                              <span className="font-medium text-blue-900">
+                                {exitRewards?.successfulPlantings || 'Loading...'} operations
+                              </span>
+                            </div>
+                            <hr className="my-2 border-blue-200" />
+                            <div className="flex justify-between font-medium">
+                              <span className="text-blue-700">Exit Delay:</span>
+                              <span className="font-medium text-blue-900">
+                                {farmerData?.active_contract?.contract_terms?.exit_delay || 24} hours
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-sm text-muted-foreground">
+                          <p>• You will receive your final rewards after the {poolData?.contractTerms.exitDelay || 24} hour exit delay</p>
+                          <p>• All your staked funds and earned rewards will be returned</p>
+                          <p>• You will no longer participate in pool activities</p>
+                        </div>
+                      </div>
+                      
+                      <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                        <Button variant="outline" onClick={() => setShowExitDialog(false)}>
+                          Cancel
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          onClick={handleExitPool}
+                          disabled={exitContractMutation.isPending}
+                        >
+                          {exitContractMutation.isPending ? 'Processing...' : 'Confirm Exit'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </CardContent>
