@@ -6,8 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useHealth, useInfo, useLogout, useFarmerBlockchainData } from '@/hooks/use-api';
+import { useHealth, useInfo, useLogout, useFarmerBlockchainData, useFarmerSummary, useFarmerPlantings, useFarmerHarvests } from '@/hooks/use-api';
 import { apiClient } from '@/lib/api-client';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Copy,
   Database,
   Globe,
   Leaf,
@@ -237,9 +239,33 @@ interface HarvestRecord {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
   const { data: info, isLoading: infoLoading, error: infoError } = useInfo();
   const { data: blockchainData, isLoading: blockchainLoading, error: blockchainError, refetch: refetchBlockchain } = useFarmerBlockchainData();
+  
+  // Get farmer ID from localStorage for React Query hooks (React Query hooks need to be at top level)
+  const [farmerId, setFarmerId] = useState<string | null>(null);
+  
+  // Initialize farmer ID from localStorage
+  useEffect(() => {
+    const id = localStorage.getItem('kale-pool-farmer-id');
+    console.log('Retrieved farmer ID from localStorage:', id);
+    setFarmerId(id);
+  }, []);
+  
+  // Use React Query hooks for farmer analytics
+  const { data: farmerSummaryData, isLoading: summaryLoading, error: summaryError } = useFarmerSummary(farmerId || undefined, '7d');
+  const { data: plantingsData, isLoading: plantingsLoading, error: plantingsError } = useFarmerPlantings(farmerId || undefined, { 
+    page: 1, 
+    limit: 10, 
+    status: 'all' 
+  });
+  const { data: harvestsData, isLoading: harvestsLoading, error: harvestsError } = useFarmerHarvests(farmerId || undefined, { 
+    page: 1, 
+    limit: 10, 
+    status: 'all' 
+  });
   const logout = useLogout({
     onSuccess: () => {
       // Navigate to landing page after successful logout
@@ -256,12 +282,12 @@ export default function Dashboard() {
   const [farmerLoading, setFarmerLoading] = useState(false);
   const [farmerError, setFarmerError] = useState<string | null>(null);
   
-  // Farmer analytics state
-  const [farmerSummary, setFarmerSummary] = useState<FarmerSummary | null>(null);
-  const [plantingHistory, setPlantingHistory] = useState<PlantingRecord[]>([]);
-  const [harvestHistory, setHarvestHistory] = useState<HarvestRecord[]>([]);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  // Derived state from React Query hooks
+  const farmerSummary = farmerSummaryData;
+  const plantingHistory = plantingsData?.items || plantingsData?.plantings || [];
+  const harvestHistory = harvestsData?.items || harvestsData?.harvests || [];
+  const analyticsLoading = summaryLoading || plantingsLoading || harvestsLoading;
+  const analyticsError = summaryError?.message || plantingsError?.message || harvestsError?.message || null;
 
   // Update uptime display
   useEffect(() => {
@@ -300,52 +326,18 @@ export default function Dashboard() {
     fetchFarmerStatus();
   }, []);
 
-  // Fetch farmer analytics data
+  // Debug logging for analytics data
   useEffect(() => {
-    const fetchFarmerAnalytics = async () => {
-      const farmerId = localStorage.getItem('kale-pool-farmer-id');
-      if (!farmerId) {
-        setAnalyticsError('No farmer ID found. Please register first.');
-        return;
-      }
-
-      setAnalyticsLoading(true);
-      setAnalyticsError(null);
-      
-      try {
-        // Fetch farmer summary
-        const summary = await apiClient.getFarmerSummary(farmerId, '7d');
-        setFarmerSummary(summary);
-
-        // Fetch planting history
-        const plantings = await apiClient.getFarmerPlantings(farmerId, { 
-          page: 1, 
-          limit: 10, 
-          status: 'all' 
-        });
-        setPlantingHistory(plantings.plantings || []);
-
-        // Fetch harvest history
-        const harvests = await apiClient.getFarmerHarvests(farmerId, { 
-          page: 1, 
-          limit: 10, 
-          status: 'all' 
-        });
-        setHarvestHistory(harvests.harvests || []);
-
-      } catch (error) {
-        console.error('Failed to fetch farmer analytics:', error);
-        setAnalyticsError('Failed to load farmer analytics');
-      } finally {
-        setAnalyticsLoading(false);
-      }
-    };
-
-    // Only fetch analytics if we have farmer status
-    if (farmerStatus?.poolContract) {
-      fetchFarmerAnalytics();
+    if (farmerId) {
+      console.log('Farmer ID found:', farmerId);
+      console.log('Summary data:', farmerSummaryData);
+      console.log('Plantings data:', plantingsData);
+      console.log('Harvests data:', harvestsData);
+      console.log('Summary loading:', summaryLoading, 'error:', summaryError);
+      console.log('Plantings loading:', plantingsLoading, 'error:', plantingsError);
+      console.log('Harvests loading:', harvestsLoading, 'error:', harvestsError);
     }
-  }, [farmerStatus?.poolContract]);
+  }, [farmerId, farmerSummaryData, plantingsData, harvestsData, summaryLoading, plantingsLoading, harvestsLoading, summaryError, plantingsError, harvestsError]);
 
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);
@@ -471,6 +463,15 @@ export default function Dashboard() {
             </Alert>
           )}
           
+          {analyticsError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <AlertDescription>
+                Failed to load farmer analytics: {analyticsError}
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Custodial Wallet Public Address */}
             <Card>
@@ -479,16 +480,46 @@ export default function Dashboard() {
                   <div className="p-2 bg-primary/10 rounded-full">
                     <Wallet className="w-4 h-4 text-primary" />
                   </div>
-                  <div>
-                    <p className="font-medium">Custodial Wallet</p>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">Custodial Wallet</p>
+                      {blockchainData?.custodialWallet?.address && blockchainData.custodialWallet.address !== 'N/A' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(blockchainData.custodialWallet.address);
+                              toast({
+                                title: "Copied to clipboard",
+                                description: "Custodial wallet address has been copied to your clipboard.",
+                                duration: 2000,
+                              });
+                            } catch (error) {
+                              toast({
+                                title: "Copy failed",
+                                description: "Failed to copy address to clipboard.",
+                                variant: "destructive",
+                                duration: 2000,
+                              });
+                            }
+                          }}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
                     {blockchainLoading ? (
                       <div className="text-sm text-muted-foreground">
                         <Skeleton className="h-4 w-32" />
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground font-mono">
-                        {blockchainData?.custodialWallet?.address ? blockchainData.custodialWallet.address.substring(0, 12) + '...' : 'Loading...'}
-                      </p>
+                      <div className="text-xs text-muted-foreground font-mono break-all">
+                        {blockchainData?.custodialWallet?.address && blockchainData.custodialWallet.address !== 'N/A' 
+                          ? blockchainData.custodialWallet.address 
+                          : 'No wallet address'}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -510,8 +541,8 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
-                        <p>{blockchainData?.custodialWallet?.xlmBalance ? `${blockchainData.custodialWallet.xlmBalance.toFixed(2)} XLM` : 'N/A XLM'}</p>
-                        <p>{blockchainData?.custodialWallet?.balance ? `${blockchainData.custodialWallet.balance.toFixed(2)} KALE` : 'N/A KALE'}</p>
+                        <p>{blockchainData?.custodialWallet?.xlmBalance !== undefined ? `${blockchainData.custodialWallet.xlmBalance.toFixed(2)} XLM` : 'N/A XLM'}</p>
+                        <p>{blockchainData?.custodialWallet?.balance !== undefined ? `${blockchainData.custodialWallet.balance.toFixed(2)} KALE` : 'N/A KALE'}</p>
                       </div>
                     )}
                   </div>
@@ -530,11 +561,11 @@ export default function Dashboard() {
                     <p className="font-medium">Block Index</p>
                     {blockchainLoading ? (
                       <div className="text-sm text-muted-foreground">
-                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-6 w-20" />
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {blockchainData?.currentBlock?.height ? `#${blockchainData.currentBlock.height.toLocaleString()}` : 'N/A'}
+                      <p className="text-lg font-semibold text-green-600">
+                        {blockchainData?.currentBlock?.height ? blockchainData.currentBlock.height.toLocaleString() : 'N/A'}
                       </p>
                     )}
                   </div>
@@ -591,24 +622,24 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Staked:</span>
-                      <span className="font-medium">{formatBalance(farmerSummary.totalStaked.toString())} XLM</span>
+                      <span className="font-medium">{formatBalance(farmerSummary.totalStaked?.toString() || '0')} XLM</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Average Stake %:</span>
-                      <span className="font-medium">{formatStakePercentage(farmerSummary.averageStakePercentage)}</span>
+                      <span className="font-medium">{formatStakePercentage(farmerSummary.averageStakePercentage || 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Success Rate:</span>
-                      <span className="font-medium">{farmerSummary.performance.successRate.toFixed(1)}%</span>
+                      <span className="font-medium">{farmerSummary.performance?.successRate?.toFixed(1) || '0.0'}%</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Blocks:</span>
-                      <span className="font-medium">{farmerSummary.performance.totalBlocks}</span>
+                      <span className="font-medium">{farmerSummary.performance?.totalBlocks || '0'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Last Activity:</span>
                       <span className="font-medium">
-                        {new Date(farmerSummary.lastActivity).toLocaleString()}
+                        {farmerSummary.lastActivity ? new Date(farmerSummary.lastActivity).toLocaleString() : 'N/A'}
                       </span>
                     </div>
                   </div>
@@ -682,23 +713,23 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Harvested:</span>
-                      <span className="font-medium">{formatBalance(farmerSummary.totalHarvested.toString())} XLM</span>
+                      <span className="font-medium">{formatBalance(farmerSummary.totalHarvested?.toString() || '0')} XLM</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Average Reward:</span>
-                      <span className="font-medium">{formatBalance(farmerSummary.performance.averageReward.toString())} XLM</span>
+                      <span className="font-medium">{formatBalance(farmerSummary.performance?.averageReward?.toString() || '0')} XLM</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Plantings:</span>
-                      <span className="font-medium">{farmerSummary.totalPlantings}</span>
+                      <span className="font-medium">{farmerSummary.totalPlantings || '0'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Successful:</span>
-                      <span className="font-medium text-green-600">{farmerSummary.successfulPlantings}</span>
+                      <span className="font-medium text-green-600">{farmerSummary.successfulPlantings || '0'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Failed:</span>
-                      <span className="font-medium text-red-600">{farmerSummary.failedPlantings}</span>
+                      <span className="font-medium text-red-600">{farmerSummary.failedPlantings || '0'}</span>
                     </div>
                   </div>
                 ) : (
@@ -732,7 +763,7 @@ export default function Dashboard() {
                         </div>
                         <div className="text-right">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{formatBalance(harvest.amount.toString())} XLM</span>
+                            <span className="text-sm font-medium">{formatBalance(harvest.amount?.toString() || '0')} XLM</span>
                             <Badge className={getStatusColor(harvest.status)}>
                               {harvest.status}
                             </Badge>
@@ -789,14 +820,14 @@ export default function Dashboard() {
                         </div>
                         <p className="text-sm text-muted-foreground">
                           Pooler: {planting.poolerId.substring(0, 8)}...
-                          {planting.reward && ` • Reward: ${formatBalance(planting.reward.toString())} XLM`}
+                          {planting.reward && ` • Reward: ${formatBalance(planting.reward?.toString() || '0')} XLM`}
                         </p>
                         {planting.error && (
                           <p className="text-xs text-red-600 mt-1">{planting.error}</p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-medium">{formatBalance(planting.stakeAmount.toString())} XLM</p>
+                        <p className="text-sm font-medium">{formatBalance(planting.stakeAmount?.toString() || '0')} XLM</p>
                         <p className="text-xs text-muted-foreground">
                           {new Date(planting.plantedAt).toLocaleString()}
                         </p>

@@ -239,6 +239,14 @@ export const validatePoolerRewards = (): ValidationChain[] => {
   ];
 };
 
+// Stellar wallet address validation
+export const validateWalletAddress = (): ValidationChain => {
+  return param('address')
+    .isLength({ min: 56, max: 56 })
+    .matches(/^G[A-Z2-7]{55}$/)
+    .withMessage('Invalid Stellar wallet address format. Must be 56 characters starting with G');
+};
+
 // Rate limiting helper
 export const createRateLimitErrorResponse = (req: Request): object => {
   return {

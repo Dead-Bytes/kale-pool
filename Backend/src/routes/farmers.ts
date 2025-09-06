@@ -10,7 +10,7 @@ import {
 } from '../middleware/validation';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
 import { db } from '../services/database';
-import { stellarService } from '../services/stellar-service';
+import { getWalletBalance } from '../services/stellar-wallet-service';
 
 const router = Router();
 
@@ -107,40 +107,55 @@ router.get('/blockchain-data',
 
       const farmer = farmerResult.rows[0];
 
-      // Get real custodial wallet balances from Stellar blockchain
+      // Get real custodial wallet balances from Stellar blockchain using SDK
       let custodialWalletBalances = {
-        xlm: 0,
-        kale: 0,
+        xlm: '0',
+        kale: '0',
         accountExists: false
       };
 
       if (farmer.custodial_public_key) {
         try {
-          // Fetch all balances from Stellar network
-          const balances = await stellarService.getAllBalances(farmer.custodial_public_key);
-          custodialWalletBalances.xlm = balances.xlm;
-          custodialWalletBalances.accountExists = true;
-          
-          // Look for KALE token in assets (would need actual KALE token issuer info)
-          const kaleAsset = balances.assets.find(asset => asset.code === 'KALE');
-          custodialWalletBalances.kale = kaleAsset ? kaleAsset.balance : 0;
-          
-          logger.info(`Fetched real Stellar balances for farmer ${farmerId}`, {
-            custodialAddress: farmer.custodial_public_key,
-            xlmBalance: balances.xlm,
-            kaleBalance: custodialWalletBalances.kale
+          logger.info(`Fetching Stellar SDK balance for farmer ${farmerId}`, {
+            custodialAddress: farmer.custodial_public_key
           });
+
+          // Use Stellar wallet service to get wallet balance
+          const balanceResult = await getWalletBalance(farmer.custodial_public_key);
+          
+          if ('error' in balanceResult) {
+            // Handle error case (account not found)
+            logger.warn(`Stellar balance fetch failed for farmer ${farmerId}:`, {
+              error: balanceResult.error,
+              accountExists: balanceResult.accountExists
+            });
+            custodialWalletBalances.xlm = balanceResult.xlm || '0';
+            custodialWalletBalances.kale = balanceResult.kale || '0';
+            custodialWalletBalances.accountExists = balanceResult.accountExists;
+          } else {
+            // Success case - got real balance data
+            custodialWalletBalances.xlm = balanceResult.xlm;
+            custodialWalletBalances.kale = balanceResult.kale;
+            custodialWalletBalances.accountExists = balanceResult.accountExists;
+            
+            logger.info(`Successfully fetched Stellar balances for farmer ${farmerId}`, {
+              custodialAddress: farmer.custodial_public_key,
+              xlmBalance: balanceResult.xlm,
+              kaleBalance: balanceResult.kale,
+              accountExists: balanceResult.accountExists
+            });
+          }
         } catch (error) {
-          logger.error(`Failed to fetch Stellar balance for farmer ${farmerId}:`, error as Error);
-          // Fall back to mock data if Stellar API fails
-          custodialWalletBalances.xlm = Math.floor(Math.random() * 1000) / 100;
-          custodialWalletBalances.kale = Math.floor(Math.random() * 10000) / 100;
+          logger.error(`Stellar SDK balance fetch exception for farmer ${farmerId}:`, error as Error);
+          // Fall back to mock data if SDK fails
+          custodialWalletBalances.xlm = (Math.floor(Math.random() * 1000) / 100).toString();
+          custodialWalletBalances.kale = (Math.floor(Math.random() * 10000) / 100).toString();
         }
       } else {
         logger.warn(`No custodial public key found for farmer ${farmerId}`);
         // Use mock data if no custodial key exists
-        custodialWalletBalances.xlm = Math.floor(Math.random() * 1000) / 100;
-        custodialWalletBalances.kale = Math.floor(Math.random() * 10000) / 100;
+        custodialWalletBalances.xlm = (Math.floor(Math.random() * 1000) / 100).toString();
+        custodialWalletBalances.kale = (Math.floor(Math.random() * 10000) / 100).toString();
       }
 
       // Get the most recent block data from block_operations table
@@ -201,8 +216,8 @@ router.get('/blockchain-data',
         },
         custodialWallet: {
           address: farmer.custodial_public_key || 'N/A',
-          balance: custodialWalletBalances.kale,
-          xlmBalance: custodialWalletBalances.xlm,
+          balance: parseFloat(custodialWalletBalances.kale),
+          xlmBalance: parseFloat(custodialWalletBalances.xlm),
           accountExists: custodialWalletBalances.accountExists,
           currency: 'KALE'
         },

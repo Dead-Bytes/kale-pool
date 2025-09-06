@@ -362,6 +362,50 @@ export function useFarmerContracts(farmerId?: string, filters?: {
   });
 }
 
+// ==================== Wallet Hooks ====================
+
+export function useWalletBalance(address?: string, options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['wallet-balance', address],
+    queryFn: () => apiClient.getWalletBalance(address!),
+    enabled: !!address,
+    staleTime: 10000, // 10 seconds - wallet balances change frequently
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    ...options,
+  });
+}
+
+export function useMyWalletBalance(options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['my-wallet-balance'],
+    queryFn: () => apiClient.getMyWalletBalance(),
+    staleTime: 10000, // 10 seconds
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    ...options,
+  });
+}
+
+export function useWalletInfo(address?: string, options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['wallet-info', address],
+    queryFn: () => apiClient.getWalletInfo(address!),
+    enabled: !!address,
+    staleTime: 60000, // 1 minute
+    ...options,
+  });
+}
+
+export function useXLMBalance(address?: string, options?: UseQueryOptions<any, APIClientError>) {
+  return useQuery({
+    queryKey: ['xlm-balance', address],
+    queryFn: () => apiClient.getXLMBalance(address!),
+    enabled: !!address,
+    staleTime: 10000, // 10 seconds
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+    ...options,
+  });
+}
+
 /**
  * Hook for optimistic updates
  */

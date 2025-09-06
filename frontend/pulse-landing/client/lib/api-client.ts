@@ -439,6 +439,24 @@ class APIClient {
     return this.get<any>(`/contracts?${params.toString()}`);
   }
 
+  // ==================== Wallet APIs ====================
+
+  async getWalletBalance(address: string): Promise<any> {
+    return this.get<any>(`/wallet/balance/${address}`);
+  }
+
+  async getMyWalletBalance(): Promise<any> {
+    return this.get<any>('/wallet/my-balance');
+  }
+
+  async getWalletInfo(address: string): Promise<any> {
+    return this.get<any>(`/wallet/info/${address}`);
+  }
+
+  async getXLMBalance(address: string): Promise<any> {
+    return this.get<any>(`/wallet/xlm/${address}`);
+  }
+
   // ==================== Pooler APIs ====================
 
   async getPoolers(userId?: string, filters?: FilterParams): Promise<PaginatedResponse<PoolerSummary>> {

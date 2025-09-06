@@ -29,6 +29,8 @@ import authRoutes from './routes/auth';
 import poolerRoutes from './routes/poolers';
 import contractRoutes from './routes/contracts';
 import farmerRoutes from './routes/farmers';
+import walletRoutes from './routes/wallet';
+import testStellarRoutes from './routes/test-stellar';
 
 // Import rate limiting middleware
 import { logRateLimitHeaders } from './middleware/rateLimit';
@@ -126,6 +128,14 @@ const registerRoutes = (app: express.Application): void => {
   
   // Farmer analytics
   app.use('/farmers', farmerRoutes);
+  
+  // Wallet management and balance checking
+  app.use('/wallet', walletRoutes);
+  
+  // Test routes (development only)
+  if (Config.NODE_ENV === 'development') {
+    app.use('/test', testStellarRoutes);
+  }
 
   // ======================
   // LEGACY/HEALTH ENDPOINTS

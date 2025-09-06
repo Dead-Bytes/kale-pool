@@ -23,7 +23,7 @@ import {
   Activity
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
-import { useUserStatus, useCurrentFarmer } from '@/hooks/use-api';
+import { useUserStatus, useCurrentFarmer, useFarmerPlantings, useFarmerHarvests } from '@/hooks/use-api';
 import { Link } from 'react-router-dom';
 
 // Interfaces for type safety
@@ -100,6 +100,10 @@ export default function MyPool() {
   // Fetch user status and farmer data
   const { data: userStatus, isLoading: userStatusLoading, error: userStatusError } = useUserStatus(userId || '');
   const { data: farmerData, isLoading: farmerLoading, error: farmerError } = useCurrentFarmer();
+  
+  // Fetch plantings and harvests for recent activity
+  const { data: plantingsData, isLoading: plantingsLoading } = useFarmerPlantings();
+  const { data: harvestsData, isLoading: harvestsLoading } = useFarmerHarvests();
 
   // Process data when available
   useEffect(() => {
@@ -155,8 +159,44 @@ export default function MyPool() {
     }
   }, [farmerData]);
 
-  // For now, we'll show empty arrays since we don't have the farmer analytics hooks yet
-  // These will be populated when the farmer analytics API is implemented
+  // Populate recent activity with plantings and harvests data
+  useEffect(() => {
+    const activities: RecentActivity[] = [];
+    
+    // Add plantings to activity
+    if (plantingsData?.plantings) {
+      plantingsData.plantings.slice(0, 5).forEach((planting: any) => {
+        if (planting.plantedAt) {
+          activities.push({
+            timestamp: planting.plantedAt,
+            type: 'plant',
+            description: `Staked ${planting.stakeAmount || '0'} XLM to Pooler ${planting.poolerId?.substring(0, 8) || 'Unknown'}...`,
+            status: planting.status || 'unknown',
+            amount: 0 // Plantings don't have earnings amount
+          });
+        }
+      });
+    }
+    
+    // Add harvests to activity
+    if (harvestsData?.harvests) {
+      harvestsData.harvests.slice(0, 5).forEach((harvest: any) => {
+        if (harvest.harvestedAt) {
+          activities.push({
+            timestamp: harvest.harvestedAt,
+            type: 'harvest',
+            description: `Harvested from Block #${harvest.blockIndex || 'Unknown'}`,
+            status: harvest.status || 'unknown',
+            amount: parseFloat(harvest.amount || '0')
+          });
+        }
+      });
+    }
+    
+    // Sort by timestamp (newest first) and limit to 10 items
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    setRecentActivity(activities.slice(0, 10));
+  }, [plantingsData, harvestsData]);
 
   const handleRefresh = () => {
     setIsLoading(true);
@@ -571,28 +611,56 @@ export default function MyPool() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                  <div key={index} className="flex items-center gap-4 p-4 border rounded-lg">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      {getActivityIcon(activity.type)}
+                {plantingsLoading || harvestsLoading ? (
+                  // Loading state
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                      <Skeleton className="w-10 h-10 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-48" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                      <div className="text-right space-y-2">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-6 w-20" />
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium capitalize">{activity.type}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {activity.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(activity.timestamp).toLocaleString()}
-                      </p>
+                  ))
+                ) : recentActivity.length > 0 ? (
+                  // Show actual activity data
+                  recentActivity.map((activity, index) => (
+                    <div key={index} className="flex items-center gap-4 p-4 border rounded-lg">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        {getActivityIcon(activity.type)}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium capitalize">{activity.type}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {activity.description}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(activity.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        {activity.amount > 0 && (
+                          <p className="font-bold text-success">+{activity.amount.toLocaleString()}</p>
+                        )}
+                        {getStatusBadge(activity.status)}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      {activity.amount > 0 && (
-                        <p className="font-bold text-success">+{activity.amount.toLocaleString()}</p>
-                      )}
-                      {getStatusBadge(activity.status)}
-                    </div>
+                  ))
+                ) : (
+                  // Empty state
+                  <div className="text-center py-12">
+                    <Activity className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No Recent Activity</h3>
+                    <p className="text-muted-foreground">
+                      Your pool activities will appear here once you start farming.
+                    </p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

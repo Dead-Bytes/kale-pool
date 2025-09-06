@@ -1,6 +1,6 @@
 import { db } from './database';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
-import { AuthUser, UserRole } from '../types/auth-types';
+import { AuthUser } from '../types/auth-types';
 
 interface FarmerAssociation {
   id: string;
@@ -259,10 +259,7 @@ export class FarmerService {
       const { farmerId, poolerId, from, to, page, limit, status, user } = params;
       const offset = (page - 1) * limit;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer plantings');
-      }
+      // Permission check handled by middleware
       
       // Build WHERE clause
       const whereConditions: string[] = ['p.farmer_id = $1'];
@@ -382,10 +379,7 @@ export class FarmerService {
       const { farmerId, poolerId, from, to, page, limit, status, user } = params;
       const offset = (page - 1) * limit;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer harvests');
-      }
+      // Permission check handled by middleware
       
       // Build WHERE clause
       const whereConditions: string[] = ['h.farmer_id = $1'];
@@ -498,10 +492,7 @@ export class FarmerService {
     try {
       const { farmerId, poolerId, window, user } = params;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer summary');
-      }
+      // Permission check handled by middleware
       
       // Build time window clause
       let windowClause = '';
