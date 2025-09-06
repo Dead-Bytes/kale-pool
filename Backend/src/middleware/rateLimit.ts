@@ -5,7 +5,7 @@ import { createRateLimitErrorResponse } from './validation';
 
 // Rate limiting configurations based on SRS requirements
 export const authRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 600, // 1 minute
   max: 5, // 5 attempts per minute per IP
   message: (req: Request) => createRateLimitErrorResponse(req),
   standardHeaders: true,

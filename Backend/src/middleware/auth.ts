@@ -112,7 +112,7 @@ export const requireRole = (allowedRoles: UserRole[]) => {
 };
 
 export const requireResourceAccess = (resource: string, action: 'read' | 'write' | 'delete') => {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
       res.status(401).json({
         error: {
@@ -128,7 +128,53 @@ export const requireResourceAccess = (resource: string, action: 'read' | 'write'
     // Get resource ID from params (common patterns)
     const resourceId = req.params.farmerId || req.params.poolerId || req.params.userId || req.params.contractId;
     
-    if (!authService.canAccessResource(req.user, resource, action, resourceId)) {
+    logger.info(`Access control check: ${JSON.stringify({
+      user_id: req.user.id,
+      user_role: req.user.role,
+      resource,
+      action,
+      resource_id: resourceId,
+      path: req.path
+    })}`);
+    
+    let hasAccess = false;
+    
+    // Handle farmer resource access specially
+    if (resource === 'farmers') {
+      logger.info(`Handling farmers resource access for user: ${req.user.role}`);
+      
+      if (req.user.role === UserRole.ADMIN) {
+        // Admins have full access
+        logger.info(`Granting admin access to farmers resource`);
+        hasAccess = true;
+      } else if (req.user.role === UserRole.FARMER) {
+        logger.info(`Checking farmer access for resource: ${resourceId}`);
+        // Farmers can only access their own data
+        try {
+          const farmerAssociation = await authService.getFarmerIdByUserId(req.user.id);
+          logger.info(`Farmer association check: ${JSON.stringify({
+            user_id: req.user.id,
+            farmer_association: farmerAssociation,
+            requested_resource_id: resourceId,
+            access_granted: farmerAssociation?.id === resourceId
+          })}`);
+          hasAccess = farmerAssociation?.id === resourceId;
+        } catch (error) {
+          logger.error('Error checking farmer association for access control', error as Error);
+          hasAccess = false;
+        }
+      } else if (req.user.role === UserRole.POOLER && action === 'read') {
+        // Poolers can read farmer data
+        hasAccess = true;
+      } else {
+        hasAccess = false;
+      }
+    } else {
+      // Use the original access control method for other cases
+      hasAccess = authService.canAccessResource(req.user, resource, action, resourceId);
+    }
+    
+    if (!hasAccess) {
       logger.warn(`Resource access denied: ${JSON.stringify({
         user_id: req.user.id,
         user_role: req.user.role,
@@ -148,6 +194,15 @@ export const requireResourceAccess = (resource: string, action: 'read' | 'write'
       });
       return;
     }
+    
+    logger.info(`Resource access granted: ${JSON.stringify({
+      user_id: req.user.id,
+      user_role: req.user.role,
+      resource,
+      action,
+      resource_id: resourceId,
+      path: req.path
+    })}`);
     
     next();
   };

@@ -18,6 +18,20 @@ const JWT_SECRET = Config.BACKEND.JWT_SECRET;
 const JWT_EXPIRES_IN = Config.BACKEND.JWT_EXPIRES_IN;
 const REFRESH_TOKEN_EXPIRES_IN = Config.BACKEND.REFRESH_TOKEN_EXPIRES_IN;
 
+// Helper to get farmer ID for a user
+async function getFarmerIdByUserId(userId: string) {
+  try {
+    const result = await db.query(
+      `SELECT id FROM farmers WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    return result.rows[0] || null;
+  } catch (error) {
+    logger.error('Failed to get farmer ID', { error, userId });
+    return null;
+  }
+}
+
 export class AuthService {
   
   async register(request: RegisterRequest): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
@@ -370,6 +384,22 @@ export class AuthService {
         
       default:
         return false;
+    }
+  }
+
+  /**
+   * Get farmer ID for a user if they are a farmer
+   */
+  async getFarmerIdByUserId(userId: string) {
+    try {
+      const result = await db.query(
+        `SELECT id FROM farmers WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Failed to get farmer ID', error as Error);
+      return null;
     }
   }
 }

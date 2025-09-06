@@ -29,6 +29,8 @@ import authRoutes from './routes/auth';
 import poolerRoutes from './routes/poolers';
 import contractRoutes from './routes/contracts';
 import farmerRoutes from './routes/farmers';
+import walletRoutes from './routes/wallet';
+import testStellarRoutes from './routes/test-stellar';
 
 // Import rate limiting middleware
 import { logRateLimitHeaders } from './middleware/rateLimit';
@@ -126,6 +128,14 @@ const registerRoutes = (app: express.Application): void => {
   
   // Farmer analytics
   app.use('/farmers', farmerRoutes);
+  
+  // Wallet management and balance checking
+  app.use('/wallet', walletRoutes);
+  
+  // Test routes (development only)
+  if (Config.NODE_ENV === 'development') {
+    app.use('/test', testStellarRoutes);
+  }
 
   // ======================
   // LEGACY/HEALTH ENDPOINTS
@@ -182,6 +192,7 @@ const registerRoutes = (app: express.Application): void => {
   // Service info endpoint
   app.get('/info', async (req: Request, res: Response) => {
     try {
+      const automatedHarvestStatus = automatedHarvestService.getStatus();
       const info = {
         service: 'KALE Pool Mining Backend',
         version: '2.0.0',
@@ -201,9 +212,9 @@ const registerRoutes = (app: express.Application): void => {
           automated_harvest: automatedHarvestStatus
         },
         config: {
-          max_farmers_per_request: BACKEND_CONFIG.MAX_FARMERS_PER_REQUEST,
-          api_rate_limit: BACKEND_CONFIG.API_RATE_LIMIT,
-          request_timeout: BACKEND_CONFIG.REQUEST_TIMEOUT
+          max_farmers_per_request: 50,
+          api_rate_limit: 100,
+          request_timeout: 30000
         },
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
@@ -311,10 +322,12 @@ const registerRoutes = (app: express.Application): void => {
         });
       } catch (error) {
         // If farmer creation fails, clean up the user record
+        console.log('Farmer registration failed', error);
         await userQueries.deleteUserById(newUserId);
         return res.status(500).json({
           error: 'REGISTRATION_FAILED',
-          message: 'Failed to register farmer'
+          message: 'Failed to register farmer',
+          error2: error
         });
       }
 
@@ -993,27 +1006,141 @@ const registerRoutes = (app: express.Application): void => {
 
   app.post('/harvest/trigger', async (req: Request, res: Response) => {
     try {
-      logger.info('Manual harvest trigger requested');
+      logger.info('Manual harvest trigger requested - using parallel harvester');
       
-      const result = await automatedHarvestService.triggerImmediateHarvest();
+      // Import database to find farmer ID
+      const { db } = await import('./services/database');
       
+      // Get farmer ID from public key in environment
+      const farmerPK = Config.FARMER.PUBLIC_KEY || process.env.FARMER_PK;
+      if (!farmerPK) {
+        return res.status(400).json({
+          error: 'FARMER_PK not configured',
+          message: 'Cannot trigger harvest without farmer public key'
+        });
+      }
+
+      // Find farmer in database by public key
+      const farmerResult = await db.query(
+        'SELECT id FROM farmers WHERE custodial_public_key = $1 OR payout_wallet_address = $1',
+        [farmerPK]
+      );
+
+      if (farmerResult.rows.length === 0) {
+        return res.status(404).json({
+          error: 'Farmer not found',
+          message: 'No farmer found with the configured public key'
+        });
+      }
+
+      const farmerId = farmerResult.rows[0].id;
+      logger.info(`Found farmer ID: ${farmerId} for public key: ${farmerPK}`);
+
+      // Find harvestable blocks from block_operations
+      const harvestableBlocks = await db.query(`
+        SELECT DISTINCT block_index 
+        FROM block_operations 
+        WHERE farmer_id = $1 
+          AND work_completed_at IS NOT NULL 
+          AND harvest_completed_at IS NULL 
+          AND work_status = 'completed'
+        ORDER BY block_index ASC
+        LIMIT 50
+      `, [farmerId]);
+
+      if (harvestableBlocks.rows.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No blocks available for harvesting',
+          result: {
+            processed_count: 0,
+            successful_harvests: 0,
+            failed_harvests: 0,
+            total_rewards: '0.0000 XLM',
+            batch_duration_ms: 0
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const blockIndexes = harvestableBlocks.rows.map(row => row.block_index);
+      logger.info(`Found ${blockIndexes.length} harvestable blocks: ${blockIndexes.join(', ')}`);
+
+      // Call parallel harvester via spawn process with environment variables
+      const { spawn } = require('child_process');
+      const path = require('path');
+      
+      const harvesterPath = path.join(process.cwd(), '..', 'ext', 'parallel-harvester.ts');
+      
+      // Set up environment for parallel harvester
+      const env = {
+        ...process.env,
+        FARMER_ID: farmerId,
+        BACKEND_URL: `http://localhost:${Config.BACKEND.PORT || 3000}`
+      };
+
+      logger.info(`Starting parallel harvester for ${blockIndexes.length} blocks...`);
+      const startTime = Date.now();
+
+      // Execute parallel harvester
+      const bunProcess = spawn('bun', [harvesterPath, ...blockIndexes.map(String)], {
+        env,
+        cwd: path.dirname(harvesterPath)
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      bunProcess.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      bunProcess.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Wait for process to complete
+      const result = await new Promise((resolve, reject) => {
+        bunProcess.on('close', (code: number) => {
+          const duration = Date.now() - startTime;
+          
+          if (code === 0) {
+            // Parse stdout to extract results if needed
+            const successCount = (stdout.match(/✅ Successfully harvested/g) || []).length;
+            const failureCount = (stdout.match(/❌ Failed to harvest/g) || []).length;
+            const rewardMatches = stdout.match(/Total Rewards: ([\d.]+) XLM/);
+            const totalRewards = rewardMatches ? rewardMatches[1] : '0.0000';
+
+            resolve({
+              processed_count: blockIndexes.length,
+              successful_harvests: successCount,
+              failed_harvests: failureCount,
+              total_rewards: `${totalRewards} XLM`,
+              batch_duration_ms: duration,
+              stdout: stdout.substring(0, 1000), // Limit output size
+              stderr: stderr.substring(0, 500)
+            });
+          } else {
+            reject(new Error(`Parallel harvester failed with code ${code}: ${stderr}`));
+          }
+        });
+      });
+
+      logger.info(`Parallel harvest completed: ${JSON.stringify(result)}`);
+
       res.json({
         success: true,
-        message: 'Manual harvest completed',
-        result: {
-          processed_count: result.processedCount,
-          successful_harvests: result.successfulHarvests.length,
-          failed_harvests: result.failedHarvests.length,
-          total_rewards: (Number(result.totalRewards) / 10**7).toFixed(4) + ' KALE',
-          batch_duration_ms: result.batchDurationMs
-        },
+        message: 'Parallel harvest completed with database updates',
+        result,
         timestamp: new Date().toISOString()
       });
+
     } catch (error) {
-      logger.error('Manual harvest trigger failed', error as Error);
+      logger.error('Parallel harvest trigger failed', error as Error);
       res.status(500).json({
         error: 'Internal Server Error',
-        message: 'Manual harvest trigger failed',
+        message: 'Parallel harvest trigger failed',
+        details: (error as Error).message,
         timestamp: new Date().toISOString()
       });
     }
@@ -1046,6 +1173,99 @@ const registerRoutes = (app: express.Application): void => {
         error: 'Internal Server Error',
         message: 'Force harvest failed',
         timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // API endpoint to save harvest results from parallel harvester
+  app.post('/api/harvest-result', async (req: Request, res: Response) => {
+    try {
+      logger.info(`Harvest result received: ${JSON.stringify({ 
+        farmerId: req.body.farmerId,
+        blockIndex: req.body.blockIndex,
+        status: req.body.status
+      })}`);
+      
+      const {
+        farmerId,
+        blockIndex,
+        rewardAmount,
+        status,
+        transactionHash,
+        error,
+        harvestedAt,
+        processingTimeMs
+      } = req.body;
+      
+      if (!farmerId || !blockIndex || !status) {
+        return res.status(400).json({
+          error: 'Missing required fields: farmerId, blockIndex, status'
+        });
+      }
+
+      // Import database
+      const { db } = await import('./services/database');
+
+      // Insert harvest result into database
+      const result = await db.query(`
+        INSERT INTO harvests (
+          farmer_id,
+          block_index,
+          reward_amount,
+          status,
+          transaction_hash,
+          error_message,
+          harvested_at,
+          processing_time_ms
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, created_at
+      `, [
+        farmerId,
+        parseInt(blockIndex),
+        rewardAmount || '0.0000000',
+        status,
+        transactionHash,
+        error,
+        harvestedAt || new Date().toISOString(),
+        processingTimeMs || 0
+      ]);
+
+      // Also update block_operations table if it exists
+      try {
+        await db.query(`
+          UPDATE block_operations 
+          SET harvest_completed_at = NOW(),
+              harvest_status = $1,
+              harvest_transaction_hash = $2
+          WHERE block_index = $3 AND farmer_id = $4
+        `, [status, transactionHash, parseInt(blockIndex), farmerId]);
+      } catch (updateError) {
+        logger.warn(`Could not update block_operations for harvest: ${updateError}`);
+      }
+
+      logger.info(`Harvest result saved successfully: ${JSON.stringify({
+        harvest_id: result.rows[0].id,
+        farmer_id: farmerId,
+        block_index: blockIndex,
+        status: status,
+        reward_amount: rewardAmount
+      })}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Harvest result saved successfully',
+        harvestId: result.rows[0].id,
+        timestamp: result.rows[0].created_at
+      });
+      
+    } catch (error) {
+      logger.error('Failed to save harvest result', error as Error, {
+        body: req.body
+      });
+      
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to save harvest result'
       });
     }
   });

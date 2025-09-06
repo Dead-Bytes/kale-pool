@@ -228,17 +228,26 @@ router.get('/me',
       
       // Get additional user permissions based on role
       const permissions = getUserPermissions(user.role);
+
+      // If user is a farmer, get their farmerID
+      let farmerId = null;
+      if (user.role === UserRole.FARMER) {
+        const result = await authService.getFarmerIdByUserId(user.id);
+        farmerId = result?.id || null;
+      }
       
       logger.info(`User profile accessed: ${JSON.stringify({
         user_id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        farmer_id: farmerId
       })}`);
       
       res.status(200).json({
         user: {
           ...user,
-          permissions
+          permissions,
+          farmerId
         }
       });
       

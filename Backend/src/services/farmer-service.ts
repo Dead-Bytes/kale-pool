@@ -1,6 +1,12 @@
 import { db } from './database';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
-import { AuthUser, UserRole } from '../types/auth-types';
+import { AuthUser } from '../types/auth-types';
+
+interface FarmerAssociation {
+  id: string;
+  userId: string;
+  status: string;
+}
 
 export interface FarmerAnalyticsParams {
   farmerId: string;
@@ -87,6 +93,161 @@ export interface FarmerSummary {
 
 export class FarmerService {
   
+  async validateFarmerAssociation(userId: string): Promise<{ farmerId: string } | null> {
+    try {
+      const result = await db.query(
+        `SELECT f.id as farmer_id
+         FROM farmers f
+         WHERE f.user_id = $1
+         AND f.status = 'active'
+         LIMIT 1`,
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        logger.info('No active farmer found for user:', { userId });
+        return null;
+      }
+      
+      logger.debug('Found farmer association:', { 
+        userId, 
+        farmerId: result.rows[0].farmer_id 
+      });
+      
+      return { farmerId: result.rows[0].farmer_id };
+    } catch (error) {
+      logger.error('Failed to validate farmer association:', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId 
+      });
+      throw error;
+    }
+  }
+
+  async getFarmerById(farmerId: string): Promise<any> {
+    try {
+      const result = await db.query(
+        `SELECT f.id,
+                f.user_id,
+                f.pooler_id,
+                f.custodial_public_key,
+                f.payout_wallet_address,
+                f.stake_percentage,
+                f.current_balance,
+                f.is_funded,
+                f.status,
+                f.status_new,
+                f.created_at,
+                f.funded_at,
+                f.joined_pool_at,
+                f.last_exit_at,
+                f.exit_count,
+                u.email,
+                u.created_at as user_created_at,
+                u.last_login_at as user_last_login,
+                pc.id as contract_id,
+                pc.status as contract_status,
+                pc.created_at as contract_created_at,
+                pc.stake_percentage as contract_stake_percentage,
+                pc.harvest_interval,
+                pc.reward_split,
+                pc.platform_fee,
+                pc.contract_terms
+         FROM farmers f
+         LEFT JOIN users u ON f.user_id = u.id
+         LEFT JOIN pool_contracts pc ON f.id = pc.farmer_id AND pc.status = 'active'
+         WHERE f.id = $1`,
+        [farmerId]
+      );
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+      
+      // Structure the response with contract details if available
+      const farmer = result.rows[0];
+      const response = {
+        farmer: {
+          id: farmer.id,
+          user_id: farmer.user_id,
+          pooler_id: farmer.pooler_id,
+          custodial_public_key: farmer.custodial_public_key,
+          payout_wallet_address: farmer.payout_wallet_address,
+          stake_percentage: farmer.stake_percentage,
+          current_balance: farmer.current_balance,
+          is_funded: farmer.is_funded,
+          status: farmer.status,
+          status_new: farmer.status_new,
+          created_at: farmer.created_at,
+          funded_at: farmer.funded_at,
+          joined_pool_at: farmer.joined_pool_at,
+          last_exit_at: farmer.last_exit_at,
+          exit_count: farmer.exit_count,
+          email: farmer.email,
+          user_created_at: farmer.user_created_at,
+          user_last_login: farmer.user_last_login
+        },
+        active_contract: farmer.contract_id ? {
+          id: farmer.contract_id,
+          status: farmer.contract_status,
+          created_at: farmer.contract_created_at,
+          stake_percentage: farmer.contract_stake_percentage,
+          harvest_interval: farmer.harvest_interval,
+          reward_split: farmer.reward_split,
+          platform_fee: farmer.platform_fee,
+          contract_terms: farmer.contract_terms
+        } : null
+      };
+      
+      return response;
+    } catch (error) {
+      const err = error as Error;
+      logger.error('Failed to get farmer by id:', {
+        message: err.message,
+        farmerId,
+        stack: err.stack
+      });
+      throw err;
+    }
+  }
+
+  async getAllFarmers(options: { page: number; limit: number; }): Promise<{
+    page: number;
+    limit: number;
+    total: number;
+    items: any[];
+  }> {
+    try {
+      const { page, limit } = options;
+      const offset = (page - 1) * limit;
+      
+      const countResult = await db.query('SELECT COUNT(*) FROM farmers');
+      const total = parseInt(countResult.rows[0].count);
+      
+      const result = await db.query(
+        `SELECT f.*,
+                u.email,
+                u.created_at as user_created_at,
+                u.last_login_at as user_last_login
+         FROM farmers f
+         LEFT JOIN users u ON f.user_id = u.id
+         ORDER BY f.created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
+      
+      return {
+        page,
+        limit,
+        total,
+        items: result.rows
+      };
+    } catch (error) {
+      logger.error('Failed to get all farmers:', { error });
+      throw error;
+    }
+  }
+  
   async getFarmerPlantings(params: FarmerAnalyticsParams): Promise<{
     farmerId: string;
     page: number;
@@ -98,10 +259,7 @@ export class FarmerService {
       const { farmerId, poolerId, from, to, page, limit, status, user } = params;
       const offset = (page - 1) * limit;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer plantings');
-      }
+      // Permission check handled by middleware
       
       // Build WHERE clause
       const whereConditions: string[] = ['p.farmer_id = $1'];
@@ -221,10 +379,7 @@ export class FarmerService {
       const { farmerId, poolerId, from, to, page, limit, status, user } = params;
       const offset = (page - 1) * limit;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer harvests');
-      }
+      // Permission check handled by middleware
       
       // Build WHERE clause
       const whereConditions: string[] = ['h.farmer_id = $1'];
@@ -337,10 +492,7 @@ export class FarmerService {
     try {
       const { farmerId, poolerId, window, user } = params;
       
-      // Check permissions
-      if (user.role === UserRole.FARMER && user.entityId !== farmerId) {
-        throw new Error('Access denied to farmer summary');
-      }
+      // Permission check handled by middleware
       
       // Build time window clause
       let windowClause = '';

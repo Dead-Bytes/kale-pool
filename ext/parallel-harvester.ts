@@ -24,6 +24,7 @@ import {
 import { Api } from "@stellar/stellar-sdk/minimal/rpc";
 import { Client } from 'kale-sc-sdk';
 import { send } from './utils';
+import fetch from 'node-fetch';
 
 interface HarvestResult {
   blockIndex: number;
@@ -47,10 +48,14 @@ interface ParallelHarvestSummary {
 
 class ParallelHarvester {
   private contract: Client;
+  private backendUrl: string;
 
   constructor() {
     // Validate required environment variables
     this.validateEnvironment();
+    
+    // Set backend URL for database updates
+    this.backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
     
     // Initialize KALE contract client (same as utils.ts)
     this.contract = new Client({
@@ -143,6 +148,54 @@ class ParallelHarvester {
   }
 
   /**
+   * Save harvest result to database via backend API
+   */
+  private async saveHarvestResult(result: HarvestResult, farmerId: string): Promise<void> {
+    try {
+      const harvestData = {
+        farmerId,
+        blockIndex: result.blockIndex,
+        rewardAmount: result.reward ? (Number(result.reward) / 10_000_000).toFixed(7) : '0.0000000', // Convert stroops to XLM
+        status: result.success ? 'success' : 'failed',
+        transactionHash: result.txHash || null,
+        error: result.error || null,
+        harvestedAt: new Date().toISOString(),
+        processingTimeMs: result.duration
+      };
+
+      const response = await fetch(`${this.backendUrl}/api/harvest-result`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(harvestData)
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.warn(`⚠️ Failed to save harvest result for block ${result.blockIndex}: ${response.status} ${errorBody}`);
+      } else {
+        console.log(`✅ Saved harvest result for block ${result.blockIndex} to database`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Error saving harvest result for block ${result.blockIndex}:`, error);
+    }
+  }
+
+  /**
+   * Save all harvest results to database
+   */
+  private async saveHarvestResultsBatch(results: HarvestResult[], farmerId: string): Promise<void> {
+    console.log(`💾 Saving ${results.length} harvest results to database...`);
+    
+    // Save results in parallel (but don't fail if some saves fail)
+    const savePromises = results.map(result => this.saveHarvestResult(result, farmerId));
+    await Promise.allSettled(savePromises);
+    
+    console.log(`💾 Finished saving harvest results to database`);
+  }
+
+  /**
    * Harvest multiple blocks in parallel
    */
   async harvestBlocks(blockIndexes: number[]): Promise<ParallelHarvestSummary> {
@@ -166,6 +219,14 @@ class ParallelHarvester {
     
     const totalReward = results.reduce((sum, r) => sum + (r.reward || 0n), 0n);
     const totalStack = results.reduce((sum, r) => sum + (r.stack || 0n), 0n);
+    
+    // Save harvest results to database
+    const farmerId = process.env.FARMER_ID;
+    if (farmerId) {
+      await this.saveHarvestResultsBatch(results, farmerId);
+    } else {
+      console.warn('⚠️ FARMER_ID not set - skipping database save');
+    }
     
     return {
       totalBlocks: blockIndexes.length,
