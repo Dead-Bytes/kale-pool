@@ -2,8 +2,8 @@
 // Phase 1: PostgreSQL connection and query utilities
 
 // Import centralized logger and config
-import { databaseLogger as logger } from '../../../Shared/utils/logger';
-import Config from '../../../Shared/config';
+import { databaseLogger as logger } from '../../Shared/utils/logger';
+import Config from '../../Shared/config';
 
 // Use dynamic import for pg to avoid build issues
 let pgModule: any = null;

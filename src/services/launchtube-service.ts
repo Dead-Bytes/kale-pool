@@ -7,8 +7,8 @@ import { Api } from '@stellar/stellar-sdk/minimal/rpc';
 import { Client } from 'kale-sc-sdk';
 
 // Import centralized logger and config
-import { launchtubeLogger as logger } from '../../../Shared/utils/logger';
-import Config from '../../../Shared/config';
+import { launchtubeLogger as logger } from '../../Shared/utils/logger';
+import Config from '../../Shared/config';
 
 export interface LaunchtubeResponse {
   success: boolean;
