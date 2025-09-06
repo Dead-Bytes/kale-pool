@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth-service';
 import { UserRole, AuthUser } from '../types/auth-types';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 // Extend Express Request interface to include user
 declare global {

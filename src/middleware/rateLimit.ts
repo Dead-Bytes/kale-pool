@@ -1,6 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 import { createRateLimitErrorResponse } from './validation';
 
 // Rate limiting configurations based on SRS requirements

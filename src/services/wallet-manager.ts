@@ -8,8 +8,8 @@ import {
 import { launchtubeService, type LaunchtubeResponse } from './launchtube-service.js';
 
 // Import centralized logger and config
-import { walletLogger as logger } from '../../../Shared/utils/logger';
-import Config from '../../../Shared/config';
+import { walletLogger as logger } from '@shared/utils/logger';
+import Config from '@shared/config';
 
 const isMainnet = (): boolean => {
   return Config.STELLAR.NETWORK === 'mainnet';

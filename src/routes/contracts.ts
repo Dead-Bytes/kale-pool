@@ -8,7 +8,7 @@ import {
   handleValidationErrors
 } from '../middleware/validation';
 import { UserRole } from '../types/auth-types';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { stellarSDKService } from '../services/stellar-sdk-service';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { body, param, query, validationResult, ValidationChain } from 'express-validator';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

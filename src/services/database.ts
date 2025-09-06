@@ -2,8 +2,8 @@
 // Phase 1: PostgreSQL connection and query utilities
 
 // Import centralized logger and config
-import { databaseLogger as logger } from '../../Shared/utils/logger';
-import Config from '../../Shared/config';
+import { databaseLogger as logger } from '@shared/utils/logger';
+import Config from '@shared/config';
 
 // Use dynamic import for pg to avoid build issues
 let pgModule: any = null;
@@ -598,7 +598,7 @@ const runMigrations = async (): Promise<void> => {
     logger.info('Running database migrations...');
     
     // Path to migrations directory
-    const migrationsDir = path.join(__dirname, '../../Shared/database/migrations');
+    const migrationsDir = path.join(__dirname, '@shared/database/migrations');
     
     // Check if migrations directory exists
     if (!fs.existsSync(migrationsDir)) {

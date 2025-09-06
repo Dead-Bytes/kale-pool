@@ -241,7 +241,7 @@ The KALE Pool Mining System is a comprehensive distributed mining pool infrastru
 
 #### Import Path Fix
 - **Problem**: `@Shared/config` import not found in Pooler
-- **Solution**: Updated to relative path `../../Shared/config`
+- **Solution**: Updated to relative path `@shared/config`
 
 ## Commands & Usage
 

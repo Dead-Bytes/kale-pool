@@ -1,5 +1,5 @@
 import { db } from './database';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 import { AuthUser, UserRole } from '../types/auth-types';
 import { authService } from './auth-service';
 

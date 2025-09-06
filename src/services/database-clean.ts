@@ -1,7 +1,7 @@
 // Database service for KALE Pool Mining Backend
 // Phase 1: PostgreSQL connection and query utilities
 
-import Config from '../../../Shared/config';
+import Config from '@shared/config';
 
 // Simple logger implementation
 class DatabaseLogger {

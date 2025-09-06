@@ -3,9 +3,9 @@
 
 import { stellarWalletManager } from './wallet-manager';
 import { farmerQueries, workQueries, poolerQueries } from './database';
-import { isValidNonce } from '../../../Shared/utils/helpers';
+import { isValidNonce } from '@shared/utils/helpers';
 import type { FarmerRow } from './database';
-import Config from '../../../Shared/config';
+import Config from '@shared/config';
 
 // Logger implementation
 class WorkLogger {

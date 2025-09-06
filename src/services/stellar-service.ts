@@ -1,4 +1,4 @@
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 interface StellarAccountData {
   account_id: string;

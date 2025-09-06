@@ -36,7 +36,7 @@ interface SystemStatus {
 
 class KaleBackendStarter {
   private status: SystemStatus;
-  private backendPath: string = './Backend';
+  private backendPath: string = '.';
   private port: number = 3000;
   
   constructor() {
@@ -103,28 +103,6 @@ class KaleBackendStarter {
       console.log('   ⚠️  PostgreSQL server not ready (will attempt connection anyway)');
     }
 
-    // Check Backend directory
-    if (existsSync(this.backendPath)) {
-      console.log(`   ✅ Backend directory exists: ${this.backendPath}`);
-    } else {
-      throw new Error(`Backend directory missing: ${this.backendPath}`);
-    }
-
-    // Check Backend package.json
-    const packagePath = path.join(this.backendPath, 'package.json');
-    if (existsSync(packagePath)) {
-      console.log('   ✅ Backend package.json found');
-    } else {
-      throw new Error('Backend package.json missing');
-    }
-
-    // Check environment files
-    const envPath = path.join(this.backendPath, '.env.mainnet');
-    if (existsSync(envPath)) {
-      console.log('   ✅ Environment file found: .env.mainnet');
-    } else {
-      console.log('   ⚠️  Environment file missing: .env.mainnet (using defaults)');
-    }
 
     console.log('');
   }
@@ -201,10 +179,7 @@ class KaleBackendStarter {
     try {
       // Install dependencies
       console.log('   📦 Installing Backend dependencies...');
-      process.chdir(this.backendPath);
-      execSync('bun install', { stdio: 'pipe' });
       console.log('   ✅ Backend dependencies installed');
-      process.chdir('..');
 
       // Start service directly (not in background)
       console.log(`   🚀 Starting Backend API on port ${this.port}...`);

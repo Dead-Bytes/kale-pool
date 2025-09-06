@@ -4,9 +4,9 @@
 import { LaunchtubeService } from './launchtube-service';
 import { blockOperationsQueries } from './database-phase2';
 import { harvestQueries } from './database';
-import { backendLogger as logger } from '../../Shared/utils/logger';
-import Config from '../../Shared/config';
-import { formatISTTime, getISTDate } from '../../Shared/utils/timing';
+import { backendLogger as logger } from '@shared/utils/logger';
+import Config from '@shared/config';
+import { formatISTTime, getISTDate } from '@shared/utils/timing';
 
 interface HarvestCandidate {
   farmerId: string;

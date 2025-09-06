@@ -1,5 +1,5 @@
 import { Horizon } from '@stellar/stellar-sdk';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 interface WalletBalance {
   xlm: string;

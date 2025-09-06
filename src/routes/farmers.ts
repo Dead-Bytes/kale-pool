@@ -8,7 +8,7 @@ import {
   validateUUID,
   handleValidationErrors
 } from '../middleware/validation';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 import { db } from '../services/database';
 import { getWalletBalance } from '../services/stellar-wallet-service';
 

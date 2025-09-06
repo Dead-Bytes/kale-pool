@@ -1,5 +1,5 @@
 import { db } from './database';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 import { AuthUser } from '../types/auth-types';
 
 interface FarmerAssociation {

@@ -11,7 +11,7 @@ import { harvestService } from './services/harvest-service';
 import { automatedHarvestService } from './services/automated-harvest-service';
 import { stellarWalletManager, type WalletKeypair } from './services/wallet-manager';
 import { initializeDatabase } from './services/database';
-import Config from '../../Shared/config';
+import Config from '@shared/config';
 import { farmerQueriesPhase2, userQueries } from './services/database-phase2';
 
 // Import Phase 2 routes
@@ -36,7 +36,7 @@ import testStellarRoutes from './routes/test-stellar';
 import { logRateLimitHeaders } from './middleware/rateLimit';
 
 // Import centralized logger
-import { backendLogger as logger } from '../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 // ======================
 // EXPRESS SERVER SETUP

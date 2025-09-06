@@ -5,7 +5,7 @@ import { stellarWalletManager } from './wallet-manager';
 import { farmerQueries, plantQueries, poolerQueries, blockOperationQueries } from './database';
 import { farmerQueriesPhase2 } from './database-phase2';
 import type { FarmerRow } from './database';
-import Config from '../../../Shared/config';
+import Config from '@shared/config';
 
 // Logger implementation
 class PlantLogger {

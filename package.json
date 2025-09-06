@@ -27,7 +27,6 @@
     "node": ">=18.0.0"
   },
   "workspaces": [
-    "Backend",
     "ext/kale-sc-sdk",
     "ext/kale-tractor-sdk"
   ],

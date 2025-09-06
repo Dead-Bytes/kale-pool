@@ -13,7 +13,7 @@ import {
 } from '../services/database-phase2';
 
 // Import centralized logger
-import { createLogger } from '../../../Shared/utils/logger';
+import { createLogger } from '@shared/utils/logger';
 const logger = createLogger('Registration Routes');
 
 // ======================

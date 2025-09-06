@@ -19,13 +19,13 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../Shared/*"]
+      "@shared/*": ["./Shared/*"]
     },
     "types": ["bun-types", "node"]
   },
   "include": [
     "src/**/*",
-    "../Shared/**/*"
+    "@shared/**/*"
   ],
   "exclude": [
     "node_modules",

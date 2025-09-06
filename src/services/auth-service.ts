@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './database';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 import { 
   AuthUser, 
   UserRole, 
@@ -12,7 +12,7 @@ import {
   JWTPayload,
   RefreshTokenRequest
 } from '../types/auth-types';
-import Config from '../../../Shared/config';
+import Config from '@shared/config';
 
 const JWT_SECRET = Config.BACKEND.JWT_SECRET;
 const JWT_EXPIRES_IN = Config.BACKEND.JWT_EXPIRES_IN;

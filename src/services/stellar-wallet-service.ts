@@ -1,4 +1,4 @@
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 async function getWalletBalance(publicKey: string) {
   try {

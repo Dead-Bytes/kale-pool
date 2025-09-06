@@ -7,7 +7,7 @@ import { workService } from './services/work-service';
 import { harvestService } from './services/harvest-service';
 import { stellarWalletManager } from './services/wallet-manager';
 import { farmerQueries, poolerQueries } from './services/database';
-import Config from '../../Shared/config';
+import Config from '@shared/config';
 import { registerPoolerRoutes } from './routes/pooler-routes';
 import type {
   FarmerRegistrationRequest,

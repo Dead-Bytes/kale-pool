@@ -2,7 +2,7 @@
 // User registration, pool contracts, and balance monitoring queries
 
 import { db, DatabaseService } from './database';
-import { databaseLogger as logger } from '../../Shared/utils/logger';
+import { databaseLogger as logger } from '@shared/utils/logger';
 
 // Type definitions for Phase 2
 export interface UserRow {
@@ -471,7 +471,7 @@ class BlockOperationsQueries {
       ]);
       
       // Log that we updated an existing block
-      const { databaseLogger } = await import('../../Shared/utils/logger');
+      const { databaseLogger } = await import('@shared/utils/logger');
       databaseLogger.info('Block discovery updated existing record', {
         block_operation_id: blockOperationId,
         block_index: blockIndex,
@@ -516,7 +516,7 @@ class BlockOperationsQueries {
     const blockOperationId = result.rows[0].id;
     
     // Log the immediate database record creation
-    const { databaseLogger } = await import('../../Shared/utils/logger');
+    const { databaseLogger } = await import('@shared/utils/logger');
     databaseLogger.info('New block discovery recorded', {
       block_operation_id: blockOperationId,
       block_index: blockIndex,
@@ -598,7 +598,7 @@ class BlockOperationsQueries {
     ]);
     
     // Log comprehensive planting results
-    const { databaseLogger } = await import('../../Shared/utils/logger');
+    const { databaseLogger } = await import('@shared/utils/logger');
     databaseLogger.info(`Block operation updated with planting results ${JSON.stringify({
       block_operation_id: blockOperationId,
       successful_plants: plantingData.successfulPlants,
@@ -693,7 +693,7 @@ class BlockOperationsQueries {
       workData.workCompletedAt
     ]);
 
-    const { databaseLogger } = await import('../../Shared/utils/logger');
+    const { databaseLogger } = await import('@shared/utils/logger');
     databaseLogger.info('Block operation updated with work completion', {
       block_index: blockIndex,
       successful_works: workData.successfulWorks,

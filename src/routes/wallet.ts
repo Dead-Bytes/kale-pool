@@ -7,7 +7,7 @@ import {
 } from '../middleware/validation';
 import { stellarSDKService } from '../services/stellar-sdk-service';
 import { farmerService } from '../services/farmer-service';
-import { backendLogger as logger } from '../../../Shared/utils/logger';
+import { backendLogger as logger } from '@shared/utils/logger';
 
 const router = Router();
 
