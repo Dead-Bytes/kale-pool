@@ -131,9 +131,9 @@ export default function MyPool() {
           <div className="space-y-2">
             <p>Your exit request has been submitted. Contract status: <strong>"exiting"</strong></p>
             <div className="bg-green-50 border border-green-200 rounded p-2 mt-2">
-              <p className="font-semibold text-green-800">💰 Rewards on the way:</p>
+              <p className="font-semibold text-green-800">🥬 KALE Rewards on the way:</p>
               <p className="text-sm text-green-700">
-                • Total Rewards: <strong>{totalRewards.toFixed(4)} XLM</strong>
+                • Total Rewards: <strong>{totalRewards.toFixed(4)} KALE</strong>
               </p>
               <p className="text-sm text-green-700">
                 • Reward Count: <strong>{rewardCount} operations</strong>
@@ -791,13 +791,13 @@ export default function MyPool() {
                       
                       <div className="space-y-4">
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                          <h4 className="font-medium mb-3 text-blue-800">💰 Expected Rewards Summary</h4>
+                          <h4 className="font-medium mb-3 text-blue-800">🥬 Expected KALE Rewards Summary</h4>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
-                              <span className="text-blue-700">Total Rewards:</span>
+                              <span className="text-blue-700">Total KALE Rewards:</span>
                               <span className="font-medium text-blue-900">
                                 {farmerData?.farmer?.current_balance ? 
-                                  parseFloat(farmerData.farmer.current_balance).toFixed(4) : '0.0000'} XLM
+                                  parseFloat(farmerData.farmer.current_balance).toFixed(4) : '0.0000'} KALE
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -823,9 +823,9 @@ export default function MyPool() {
                         </div>
                         
                         <div className="text-sm text-muted-foreground">
-                          <p>• You will receive your final rewards after the {poolData?.contractTerms.exitDelay || 24} hour exit delay</p>
-                          <p>• All your staked funds and earned rewards will be returned</p>
-                          <p>• You will no longer participate in pool activities</p>
+                          <p>• You will receive your final KALE rewards after the {poolData?.contractTerms.exitDelay || 24} hour exit delay</p>
+                          <p>• All your earned KALE rewards will be transferred to your wallet</p>
+                          <p>• You will no longer participate in pool mining activities</p>
                         </div>
                       </div>
                       
