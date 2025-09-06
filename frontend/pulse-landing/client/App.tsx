@@ -56,7 +56,6 @@ const App = () => (
               {/* Public routes without AppLayout (no sidebar) */}
               <Route path="/" element={<Landing />} />
               <Route path="/auth/signin" element={<SignIn />} />
-              <Route path="/auth/signup" element={<SignUp />} />
               <Route path="/farmer/wallet" element={<WalletRegistration />} />
               <Route path="/pool-operator" element={<PoolOperatorDev />} />
 

@@ -63,20 +63,24 @@ export default function WorkHistory() {
   const [workHistory, setWorkHistory] = useState<WorkHistoryItem[]>([]);
   const [farmerStats, setFarmerStats] = useState<FarmerStats[]>([]);
 
-  // API hooks - farmerId is now optional in the hooks since the API client handles it
+  // Check if farmer ID exists in local storage
+  const farmerId = localStorage.getItem('kale-pool-farmer-id');
+  const hasFarmerId = !!farmerId;
+
+  // API hooks - only call when farmer ID exists
   const { 
     data: farmerSummary, 
     isLoading: summaryLoading, 
     error: summaryError,
     refetch: refetchSummary 
-  } = useFarmerSummary(undefined, timeRange as '24h' | '7d' | '30d' | 'all');
+  } = useFarmerSummary(farmerId || undefined, timeRange as '24h' | '7d' | '30d' | 'all');
 
   const { 
     data: plantingsData, 
     isLoading: plantingsLoading, 
     error: plantingsError,
     refetch: refetchPlantings 
-  } = useFarmerPlantings(undefined, {
+  } = useFarmerPlantings(farmerId || undefined, {
     status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
     poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
     page: 1,
@@ -88,7 +92,7 @@ export default function WorkHistory() {
     isLoading: harvestsLoading, 
     error: harvestsError,
     refetch: refetchHarvests 
-  } = useFarmerHarvests(undefined, {
+  } = useFarmerHarvests(farmerId || undefined, {
     status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed',
     poolerId: poolerFilter === 'all' ? undefined : poolerFilter,
     page: 1,
@@ -97,6 +101,19 @@ export default function WorkHistory() {
 
   const isLoading = summaryLoading || plantingsLoading || harvestsLoading;
   const hasError = summaryError || plantingsError || harvestsError;
+
+  // Debug logging for data structure issues
+  useEffect(() => {
+    if (farmerSummary) {
+      console.log('Farmer Summary Data:', farmerSummary);
+    }
+    if (plantingsData) {
+      console.log('Plantings Data:', plantingsData);
+    }
+    if (harvestsData) {
+      console.log('Harvests Data:', harvestsData);
+    }
+  }, [farmerSummary, plantingsData, harvestsData]);
 
   const handleExport = () => {
     // Implement CSV/PDF export
@@ -116,36 +133,40 @@ export default function WorkHistory() {
       const combinedHistory: WorkHistoryItem[] = [];
       
       // Add plantings as work submissions
-      if (plantingsData.items) {
+      if (plantingsData.items && Array.isArray(plantingsData.items)) {
         plantingsData.items.forEach((planting: any) => {
-          combinedHistory.push({
-            id: planting.id,
-            blockIndex: planting.blockIndex,
-            status: planting.status === 'success' ? 'success' : 'failed',
-            amount: planting.stakeAmountHuman || '0',
-            timestamp: planting.plantedAt,
-            poolerId: planting.poolerId,
-            poolerName: planting.poolerName,
-            type: 'planting',
-            transactionHash: planting.transactionHash
-          });
+          if (planting && planting.id) {
+            combinedHistory.push({
+              id: planting.id,
+              blockIndex: planting.blockIndex || 0,
+              status: planting.status === 'success' ? 'success' : 'failed',
+              amount: planting.stakeAmountHuman || '0',
+              timestamp: planting.plantedAt || new Date().toISOString(),
+              poolerId: planting.poolerId || 'unknown',
+              poolerName: planting.poolerName || 'Unknown Pooler',
+              type: 'planting',
+              transactionHash: planting.transactionHash || ''
+            });
+          }
         });
       }
 
       // Add harvests as work completions
-      if (harvestsData.items) {
+      if (harvestsData.items && Array.isArray(harvestsData.items)) {
         harvestsData.items.forEach((harvest: any) => {
-          combinedHistory.push({
-            id: harvest.id,
-            blockIndex: harvest.blockIndex,
-            status: harvest.status === 'success' ? 'success' : 'failed',
-            amount: harvest.rewardAmountHuman || '0',
-            timestamp: harvest.harvestedAt,
-            poolerId: harvest.poolerId,
-            poolerName: harvest.poolerName,
-            type: 'harvest',
-            transactionHash: harvest.transactionHash
-          });
+          if (harvest && harvest.id) {
+            combinedHistory.push({
+              id: harvest.id,
+              blockIndex: harvest.blockIndex || 0,
+              status: harvest.status === 'success' ? 'success' : 'failed',
+              amount: harvest.rewardAmountHuman || '0',
+              timestamp: harvest.harvestedAt || new Date().toISOString(),
+              poolerId: harvest.poolerId || 'unknown',
+              poolerName: harvest.poolerName || 'Unknown Pooler',
+              type: 'harvest',
+              transactionHash: harvest.transactionHash || ''
+            });
+          }
         });
       }
 
@@ -153,7 +174,7 @@ export default function WorkHistory() {
       combinedHistory.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setWorkHistory(combinedHistory);
     }
-  }, [plantingsData, harvestsData, currentFarmerId]);
+  }, [plantingsData, harvestsData]);
 
   const filteredWorkHistory = workHistory
     .filter(work => {
@@ -212,7 +233,7 @@ export default function WorkHistory() {
                 <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
                 <p className="text-2xl font-bold">
                   {isLoading ? <Skeleton className="h-8 w-16" /> : 
-                   `${farmerSummary?.lifetime?.successRate || 0}%`}
+                   `${Math.round((farmerSummary?.lifetime?.successRate || 0) * 100)}%`}
                 </p>
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
@@ -349,11 +370,28 @@ export default function WorkHistory() {
       </Card>
 
       {/* Error Alert */}
-      {hasError && (
+      {!hasFarmerId && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            Failed to load work history data. Please try refreshing the page.
+            <div>
+              <p>No farmer account found. Please complete your farmer registration first.</p>
+              <p className="text-sm mt-1">You need to register as a farmer to view work history data.</p>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {hasError && hasFarmerId && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div>
+              <p>Failed to load work history data. Please try refreshing the page.</p>
+              {summaryError && <p className="text-sm mt-1">Summary Error: {summaryError.message}</p>}
+              {plantingsError && <p className="text-sm mt-1">Plantings Error: {plantingsError.message}</p>}
+              {harvestsError && <p className="text-sm mt-1">Harvests Error: {harvestsError.message}</p>}
+            </div>
           </AlertDescription>
         </Alert>
       )}

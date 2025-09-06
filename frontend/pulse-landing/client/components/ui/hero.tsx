@@ -40,8 +40,7 @@ export default function Globe3D() {
             Earn More, Together with <span className="text-[#95c697]">KALE Pooling</span>
           </h1>
           <p className="mx-auto mb-10 max-w-2xl text-lg text-white/70 md:text-xl">
-            Coordinate Plant → Work → Harvest across many farmers for consistent rewards,
-            full transparency, and enterprise-grade reliability.
+            Pool together, earn together. Simple KALE mining for everyone - no technical knowledge or expensive equipment required.
           </p>
 
           <div className="mb-10 sm:mb-0 flex flex-col items-center justify-center gap-4 sm:flex-row">

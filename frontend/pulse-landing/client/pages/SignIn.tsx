@@ -75,7 +75,7 @@ export default function SignIn() {
       onSignIn={handleSignIn}
       isLoading={isLoading}
       onResetPassword={() => {}}
-      onCreateAccount={() => navigate('/signup')}
+      onCreateAccount={() => navigate('/farmer/wallet')}
     />
   );
 }

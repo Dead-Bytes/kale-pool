@@ -377,7 +377,7 @@ export default function MyPool() {
             <p className="text-muted-foreground mb-4">
               You are not currently part of any pool. Join a pool to start earning rewards.
             </p>
-            <Button onClick={() => window.location.href = '/pool-discovery'}>
+            <Button onClick={() => window.location.href = '/farmer/pools'}>
               Browse Pools
             </Button>
           </CardContent>
