@@ -7,10 +7,10 @@
     "start": "bun run start.ts",
     "dev": "bun run start.ts",
     "start:backend": "bun run start-backend.ts",
-    "db:setup": "cd Backend && bun run db:migrate",
-    "build": "bun run build",
-    "test": "cd Backend && bun test",
-    "lint": "cd Backend && bun run lint"
+    "db:setup": " bun run db:migrate",
+    "build": "bun build start-backend.ts --outdir=dist --target=bun",
+    "test": " bun test",
+    "lint": "bun run lint"
   },
   "keywords": [
     "kale",
@@ -70,5 +70,5 @@
   "bugs": {
     "url": "https://github.com/your-org/kale-pool-mining/issues"
   },
-  "homepage": "https://github.com/your-org/kale-pool-mining#readme",
+  "homepage": "https://github.com/your-org/kale-pool-mining#readme"
 }

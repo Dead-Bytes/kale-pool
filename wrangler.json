@@ -1,7 +1,11 @@
 {
   "name": "backend",
-  "main": "src/index.ts",
+  "main": "dist/start-backend.js",
   "compatibility_date": "2025-09-06",
+
+  "build": {
+    "command": "bun run build"
+  },
 
   "vars": {
     "PORT": "8080",
