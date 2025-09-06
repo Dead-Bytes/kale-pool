@@ -8,7 +8,7 @@
     "dev": "bun run start.ts",
     "start:backend": "bun run start-backend.ts",
     "db:setup": "cd Backend && bun run db:migrate",
-    "build": "cd Backend && bun run build",
+    "build": "cd Backend && bun install && bun run build",
     "test": "cd Backend && bun test",
     "lint": "cd Backend && bun run lint"
   },
