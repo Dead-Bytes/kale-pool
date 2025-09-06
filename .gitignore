@@ -8,3 +8,5 @@ node_modules/*
 **/logs/*
 logs/*
 **/*.log
+.lock
+*/.lock
