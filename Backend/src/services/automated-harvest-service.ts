@@ -38,45 +38,72 @@ export class AutomatedHarvestService {
   private harvestInterval: NodeJS.Timer | null = null;
   private isRunning = false;
   private launchtubeService: LaunchtubeService;
-  private readonly CHECK_INTERVAL_MS = 30000; // Check every 30 seconds
   private readonly MAX_PARALLEL_HARVESTS = 10;
   private readonly DEFAULT_HARVEST_DELAY = 30; // 30 seconds after work completion
+  private readonly BLOCK_READINESS_DELAY = 60; // Wait 60 seconds after block discovery before attempting harvest
 
   constructor() {
     this.launchtubeService = new LaunchtubeService();
     logger.info(`AutomatedHarvestService initialized ${JSON.stringify({
-      check_interval_ms: this.CHECK_INTERVAL_MS,
       max_parallel_harvests: this.MAX_PARALLEL_HARVESTS,
-      default_harvest_delay: this.DEFAULT_HARVEST_DELAY
+      default_harvest_delay: this.DEFAULT_HARVEST_DELAY,
+      block_readiness_delay: this.BLOCK_READINESS_DELAY
     })}`);
   }
 
   /**
-   * Start the automated harvest service
+   * Start the automated harvest service (now event-driven, not timer-based)
    */
   start(): void {
     if (this.isRunning) {
-      logger.warn('Automated harvest service already running');
+      logger.warn('🚜 Automated harvest service is already running');
       return;
     }
 
     this.isRunning = true;
-    
-    logger.info(`🚜 Starting automated harvest service ${JSON.stringify({
-      check_interval_ms: this.CHECK_INTERVAL_MS
-    })}`);
 
-    // Start the harvest check loop
-    this.harvestInterval = setInterval(async () => {
+    logger.info('🚜 Starting block-driven automated harvest service');
+  }
+
+  /**
+   * Trigger harvest check when new block is discovered
+   */
+  async onBlockDiscovered(blockIndex: number): Promise<void> {
+    if (!this.isRunning) {
+      logger.warn('Harvest service not running, ignoring block discovery');
+      return;
+    }
+
+    logger.info(`🔔 Block discovered: ${blockIndex}, scheduling harvest check`);
+    
+    // Schedule harvest check after block readiness delay
+    setTimeout(async () => {
       try {
         await this.executeHarvestCycle();
       } catch (error) {
-        logger.error('Error in automated harvest cycle', error as Error);
+        logger.error('Error in block-triggered harvest cycle', error as Error);
       }
-    }, this.CHECK_INTERVAL_MS);
+    }, this.BLOCK_READINESS_DELAY * 1000);
+  }
 
-    // Run initial harvest check
-    setTimeout(() => this.executeHarvestCycle(), 5000);
+  /**
+   * Trigger harvest check when work operations complete
+   */
+  async onWorkCompleted(blockIndex: number, farmerId: string): Promise<void> {
+    if (!this.isRunning) {
+      return;
+    }
+
+    logger.info(`🔔 Work completed for farmer ${farmerId.substring(0, 8)}... on block ${blockIndex}, scheduling harvest check`);
+    
+    // Schedule harvest check after default delay
+    setTimeout(async () => {
+      try {
+        await this.executeHarvestCycle();
+      } catch (error) {
+        logger.error('Error in work-triggered harvest cycle', error as Error);
+      }
+    }, this.DEFAULT_HARVEST_DELAY * 1000);
   }
 
   /**
@@ -226,20 +253,61 @@ export class AutomatedHarvestService {
    */
   private async getUnharvestedWorks(farmerId: string): Promise<any[]> {
     try {
-      // This is a simplified implementation - in a real system you'd have a works table
-      // For now, we'll check block operations where the farmer participated and succeeded
+      const { db } = await import('./database');
       
-      // Get recent successful block operations where this farmer planted/worked
-      const recentBlocks = await blockOperationsQueries.getRecentBlocksByFarmer(farmerId, 24); // 24 hours
+      // Get current block index from block_operations to calculate harvest interval
+      const currentBlockResult = await db.query(`
+        SELECT MAX(block_index) as current_block_index 
+        FROM block_operations 
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `);
+      const currentBlockIndex = parseInt(currentBlockResult.rows[0]?.current_block_index) || 0;
       
-      return recentBlocks
-        .filter(block => block.successful_works > 0) // Only blocks with successful work
-        .map(block => ({
-          farmer_id: farmerId,
-          block_index: block.block_index,
-          completed_at: block.completed_at || new Date(Date.now() - 3600000), // 1 hour ago fallback
-          status: 'success'
-        }));
+      // IMPROVED QUERY: Only blocks where farmer planted AND worked successfully,
+      // and enough blocks have passed (harvest interval logic from reference)
+      const harvestInterval = 2; // blocks to wait before harvest (same as reference)
+      
+      const result = await db.query(`
+        SELECT DISTINCT
+          p.block_index,
+          w.worked_at as work_completed_at,
+          p.farmer_id,
+          p.planted_at
+        FROM plantings p
+        INNER JOIN works w ON (
+          p.block_index = w.block_index AND 
+          p.farmer_id = w.farmer_id
+        )
+        WHERE p.farmer_id = $1
+        AND p.status = 'success'           -- Must have planted successfully
+        AND w.status = 'success'           -- Must have worked successfully
+        AND w.worked_at IS NOT NULL     -- Work must be completed  
+        AND p.block_index <= ($2::bigint - $3::bigint)       -- Harvest interval check (currentBlock - harvestInterval)
+        AND p.planted_at > NOW() - INTERVAL '24 hours'  -- Within last 24 hours
+        AND p.block_index NOT IN (
+          -- Exclude blocks already harvested successfully
+          SELECT h.block_index 
+          FROM harvests h 
+          WHERE h.farmer_id = $1 AND h.status = 'success'
+        )
+        ORDER BY p.block_index ASC  -- Harvest oldest blocks first
+        LIMIT 10  -- Smaller batch for better success rate
+      `, [farmerId, currentBlockIndex, harvestInterval]);
+      
+      const works = result.rows.map(row => ({
+        block_index: row.block_index,
+        completed_at: row.work_completed_at,
+        farmer_id: row.farmer_id,
+        status: 'worked' // Mark as worked status like reference
+      }));
+      
+      if (works.length > 0) {
+        logger.info(`Found ${works.length} harvest-ready blocks for farmer ${farmerId.substring(0, 8)}... (blocks: ${works.map(w => w.block_index).join(', ')})`);
+      } else {
+        logger.debug(`No harvest-ready blocks for farmer ${farmerId.substring(0, 8)}... (current block: ${currentBlockIndex}, harvest interval: ${harvestInterval})`);
+      }
+        
+      return works;
 
     } catch (error) {
       logger.error('Failed to get unharvested works', error as Error, { farmer_id: farmerId });
@@ -302,7 +370,13 @@ export class AutomatedHarvestService {
     const successful = results.filter(r => r.success);
     const failed = results.filter(r => !r.success);
     const totalRewards = successful.reduce((sum, result) => {
-      return sum + BigInt(result.reward || '0');
+      try {
+        const rewardStr = String(result.reward || '0');
+        return sum + BigInt(rewardStr === '[object Object]' ? '0' : rewardStr);
+      } catch (error) {
+        logger.warn(`Failed to parse reward as BigInt: ${result.reward}`, { error });
+        return sum;
+      }
     }, 0n);
 
     return {
@@ -337,7 +411,8 @@ export class AutomatedHarvestService {
 
       if (harvestResult.success) {
         // Extract reward from transaction result if available
-        const reward = harvestResult.details?.reward || '0';
+        const rawReward = harvestResult.details?.reward || 0;
+        const reward = typeof rawReward === 'object' ? String(rawReward) : String(rawReward);
         
         logger.debug(`✅ Harvest successful ${JSON.stringify({
           farmer_id: candidate.farmerId.substring(0, 8) + '...',

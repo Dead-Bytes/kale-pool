@@ -728,7 +728,7 @@ class PlantingQueries {
       plantData.farmer_id,
       plantData.pooler_id,
       plantData.custodial_wallet,
-      BigInt(plantData.stake_amount),
+      BigInt(Math.floor(parseFloat(plantData.stake_amount) * 10000000)), // Convert KALE to stroops
       plantData.transaction_hash,
       plantData.status,
       plantData.error_message

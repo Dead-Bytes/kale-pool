@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: kale-pool-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-kale_pool_mainnet}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./Shared/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./Shared/database/migrations/001_initial.sql:/docker-entrypoint-initdb.d/02-initial.sql
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-kale_pool_mainnet}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # KALE Pool Backend API
+  kale-pool-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kale-pool-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-kale_pool_mainnet}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-kale_pool_mainnet}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      
+      # Server
+      PORT: 8080
+      NODE_ENV: production
+      API_VERSION: v1
+      
+      # JWT & Security
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+      
+      # KALE/Stellar Configuration
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-mainnet}
+      STELLAR_HORIZON_URL: ${STELLAR_HORIZON_URL:-https://horizon.stellar.org}
+      KALE_CONTRACT_ADDRESS: ${KALE_CONTRACT_ADDRESS}
+      
+      # Pool Configuration
+      POOL_NAME: ${POOL_NAME:-KALE Pool Mainnet}
+      POOL_FEE: ${POOL_FEE:-0.05}
+      MIN_STAKE: ${MIN_STAKE:-1}
+      
+      # Service Configuration
+      HARVEST_INTERVAL: ${HARVEST_INTERVAL:-30}
+      PLANT_INTERVAL: ${PLANT_INTERVAL:-60}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: kale-pool-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: kale-pool-network
