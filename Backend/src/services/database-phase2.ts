@@ -134,8 +134,8 @@ export class FarmerQueriesPhase2 {
     const result = await this.db.query(
       `INSERT INTO farmers (
         user_id, custodial_public_key, custodial_secret_key, 
-        payout_wallet_address, status_new
-      ) VALUES ($1, $2, $3, $4, 'wallet_created') 
+        payout_wallet_address, status
+      ) VALUES ($1, $2, $3, $4, 'active') 
       RETURNING id`,
       [userId, custodialPublicKey, custodialSecretKey, externalWallet]
     );

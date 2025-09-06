@@ -8,6 +8,19 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- CORE ENTITIES
 -- ======================
 
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT,
+    external_wallet VARCHAR(56) NOT NULL,
+    status VARCHAR(20) DEFAULT 'registered' CHECK (status IN ('registered', 'verified', 'suspended')),
+    role VARCHAR(20) DEFAULT 'farmer' CHECK (role IN ('farmer', 'pooler', 'admin')),
+    entity_id UUID,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    verified_at TIMESTAMP WITH TIME ZONE,
+    last_login_at TIMESTAMP WITH TIME ZONE
+);
+
 CREATE TABLE poolers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -23,15 +36,18 @@ CREATE TABLE poolers (
 
 CREATE TABLE farmers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id),
+    pooler_id UUID REFERENCES poolers(id),
     custodial_public_key VARCHAR(56) UNIQUE NOT NULL,
     custodial_secret_key TEXT NOT NULL, -- UNENCRYPTED for Phase 1
-    pooler_id UUID NOT NULL REFERENCES poolers(id),
     payout_wallet_address VARCHAR(56) NOT NULL,
     stake_percentage DECIMAL(5,4) NOT NULL DEFAULT 0.1 CHECK (stake_percentage >= 0.0 AND stake_percentage <= 1.0),
     current_balance BIGINT NOT NULL DEFAULT 0,
     is_funded BOOLEAN NOT NULL DEFAULT false,
     status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'leaving', 'departed')),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_exit_at TIMESTAMP WITH TIME ZONE,
+    exit_count INTEGER DEFAULT 0
 );
 
 -- ======================
@@ -103,6 +119,19 @@ CREATE TABLE block_operations (
 );
 
 -- ======================
+-- AUTHENTICATION & SESSIONS
+-- ======================
+
+CREATE TABLE refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    is_revoked BOOLEAN DEFAULT FALSE
+);
+
+-- ======================
 -- COMPENSATION TRACKING
 -- ======================
 
@@ -122,6 +151,20 @@ CREATE TABLE pooler_compensations (
 -- INDEXES FOR PERFORMANCE
 -- ======================
 
+-- User operations
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_entity_id ON users(entity_id);
+CREATE INDEX idx_users_last_login_at ON users(last_login_at);
+
+-- Authentication & sessions
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+CREATE INDEX idx_refresh_tokens_is_revoked ON refresh_tokens(is_revoked);
+CREATE INDEX idx_refresh_tokens_user_active ON refresh_tokens(user_id, is_revoked, expires_at);
+
 -- Block operations - frequently queried by block_index
 CREATE INDEX idx_plantings_block_index ON plantings(block_index);
 CREATE INDEX idx_plantings_farmer_id ON plantings(farmer_id);
@@ -139,9 +182,12 @@ CREATE INDEX idx_harvests_status ON harvests(status);
 CREATE INDEX idx_harvests_block_farmer ON harvests(block_index, farmer_id);
 
 -- Farmer operations
+CREATE INDEX idx_farmers_user_id ON farmers(user_id);
 CREATE INDEX idx_farmers_pooler_id ON farmers(pooler_id);
 CREATE INDEX idx_farmers_status ON farmers(status);
 CREATE INDEX idx_farmers_pooler_status ON farmers(pooler_id, status);
+CREATE INDEX idx_farmers_last_exit_at ON farmers(last_exit_at);
+CREATE INDEX idx_farmers_exit_count ON farmers(exit_count);
 
 -- Block operations
 CREATE INDEX idx_block_operations_block_index ON block_operations(block_index);

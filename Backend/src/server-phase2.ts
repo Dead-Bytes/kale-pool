@@ -311,13 +311,26 @@ const registerRoutes = (app: express.Application): void => {
           { expiresIn: '24h' }
         );
 
+        logger.info(`Farmer registration successful ${JSON.stringify({
+          user_id: newUserId,
+          farmer_id: farmerId,
+          email,
+          custodial_wallet: wallet.publicKey
+        })}`);
+
         return res.status(201).json({
           success: true,
           message: 'Farmer registered successfully',
           data: {
             userId: newUserId,
             farmerId: farmerId,
-            token
+            email,
+            custodialWallet: wallet.publicKey,
+            token,
+            role: 'farmer',
+            status: 'wallet_created',
+            message: 'Registration successful. Please fund your custodial wallet with XLM.',
+            createdAt: new Date().toISOString()
           }
         });
       } catch (error) {
@@ -331,57 +344,9 @@ const registerRoutes = (app: express.Application): void => {
         });
       }
 
-      // Hash password
-      const passwordHash = await bcrypt.hash(password, 12);
-
-      // Create user with proper external wallet
-      const { db } = await import('./services/database');
-      const userId = await db.query(`
-        INSERT INTO users (email, external_wallet, status, password_hash, role)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-      `, [email, externalWallet, 'registered', passwordHash, 'farmer']).then(res => res.rows[0].id);
-      
-      // Create farmer record
-      const farmerId = await farmerQueriesPhase2.createFarmerWithUser(
-        userId,
-        wallet.publicKey,
-        wallet.secretKey,
-        externalWallet
-      );
-
-      // Generate JWT token
-      const token = jwt.sign({
-        userId,
-        email,
-        role: 'farmer',
-        entityId: farmerId
-      }, Config.BACKEND.JWT_SECRET, {
-        expiresIn: Config.BACKEND.JWT_EXPIRES_IN
-      });
-
-      logger.info(`Unified farmer registration successful ${JSON.stringify({
-        user_id: userId,
-        farmer_id: farmerId,
-        email,
-        custodial_wallet: wallet.publicKey
-      })}`);
-
-      res.status(201).json({
-        userId,
-        farmerId,
-        email,
-        custodialWallet: wallet.publicKey,
-        token,
-        role: 'farmer',
-        status: 'wallet_created',
-        message: 'Registration successful. Please fund your custodial wallet with XLM.',
-        createdAt: new Date().toISOString()
-      });
-
     } catch (error) {
       logger.error('Unified farmer registration error', error as Error);
-      res.status(500).json({
+      return res.status(500).json({
         error: 'REGISTRATION_FAILED',
         message: 'Failed to register farmer'
       });
