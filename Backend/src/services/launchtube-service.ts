@@ -385,7 +385,17 @@ export class LaunchtubeService {
         }
       } else {
         // Simulation successful - proceed with harvest
-        // Send the transaction directly using Launchtube (same as reference send() function)
+        // FIRST: Extract reward from transaction.result (EXACT reference pattern)
+        const rewardAmount = transaction.result ? Number(transaction.result) : 0;
+        logger.info('Harvest transaction result extracted', {
+          farmer: farmerPublicKey,
+          block_index: blockIndex,
+          raw_result: transaction.result ? transaction.result.toString() : '0', // Convert BigInt to string for logging
+          reward_stroops: rewardAmount,
+          reward_kale: (rewardAmount / 10000000).toFixed(7)
+        });
+        
+        // Send the transaction using Launchtube (same as reference send() function)
         try {
           const data = new FormData();
           
@@ -406,20 +416,20 @@ export class LaunchtubeService {
           
           if (response.ok) {
             const responseData = await response.json();
-            const reward = transaction.simulation?.result?.retval || '0';
             
             logger.info('Harvest operation successful', {
               farmer: farmerPublicKey,
               transaction_hash: responseData.hash || 'unknown',
               block_index: blockIndex,
-              reward: reward.toString()
+              reward_stroops: rewardAmount,
+              reward_kale: (rewardAmount / 10000000).toFixed(7)
             });
             
             return {
               success: true,
               transactionHash: responseData.hash || 'unknown',
               details: {
-                reward: reward.toString(),
+                reward: rewardAmount.toString(), // Use the reward we already extracted
                 response: responseData
               }
             };
