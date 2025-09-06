@@ -390,7 +390,7 @@ export class LaunchtubeService {
         logger.info('Harvest transaction result extracted', {
           farmer: farmerPublicKey,
           block_index: blockIndex,
-          raw_result: transaction.result,
+          raw_result: transaction.result ? transaction.result.toString() : '0', // Convert BigInt to string for logging
           reward_stroops: rewardAmount,
           reward_kale: (rewardAmount / 10000000).toFixed(7)
         });

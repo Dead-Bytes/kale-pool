@@ -1336,8 +1336,40 @@ async function executePlantOperations(activeFarmers: any[], blockIndex: number):
 
   const plantPromises = activeFarmers.map(async (farmer) => {
     try {
-      // Calculate stake amount from farmer's stake percentage (0% = 0 KALE)
-      const stakeAmount = Math.max(0, farmer.stake_percentage * 12); // Base stake of 12 KALE
+      // Calculate stake amount using real-time wallet balance
+      let stakeAmount = 0;
+      
+      try {
+        // Get real-time KALE balance from Stellar wallet
+        const { getWalletBalance } = await import('./services/stellar-wallet-service');
+        const balanceResult = await getWalletBalance(farmer.custodial_public_key);
+        
+        if ('error' in balanceResult) {
+          logger.warn('Failed to fetch wallet balance for stake calculation, using fallback', {
+            farmer_id: farmer.id,
+            custodial_wallet: farmer.custodial_public_key,
+            error: balanceResult.error
+          });
+          stakeAmount = Math.max(0, farmer.stake_percentage * 12); // Fallback to old calculation
+        } else {
+          // Use real-time balance with pool contract percentage
+          const walletBalanceKale = parseFloat(balanceResult.kale);
+          stakeAmount = walletBalanceKale * farmer.stake_percentage;
+          
+          logger.info('Real-time stake calculation completed', {
+            farmer_id: farmer.id,
+            wallet_balance_kale: walletBalanceKale.toFixed(7),
+            stake_percentage: farmer.stake_percentage,
+            calculated_stake_kale: stakeAmount.toFixed(7),
+            source: 'real_time_stellar_wallet'
+          });
+        }
+      } catch (balanceError) {
+        logger.error('Error fetching wallet balance for stake calculation', balanceError as Error, {
+          farmer_id: farmer.id
+        });
+        stakeAmount = Math.max(0, farmer.stake_percentage * 12); // Fallback to old calculation
+      }
       
       // Execute plant via Launchtube
       const result = await stellarWalletManager.plantForFarmer(
