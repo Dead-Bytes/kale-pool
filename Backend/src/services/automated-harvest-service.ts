@@ -3,6 +3,7 @@
 
 import { LaunchtubeService } from './launchtube-service';
 import { blockOperationsQueries } from './database-phase2';
+import { harvestQueries } from './database';
 import { backendLogger as logger } from '../../../Shared/utils/logger';
 import Config from '../../../Shared/config';
 import { formatISTTime, getISTDate } from '../../../Shared/utils/timing';
@@ -261,11 +262,21 @@ export class AutomatedHarvestService {
         FROM block_operations 
         WHERE created_at > NOW() - INTERVAL '24 hours'
       `);
-      const currentBlockIndex = parseInt(currentBlockResult.rows[0]?.current_block_index) || 0;
+      
+      // Handle NULL/undefined block index properly
+      const rawBlockIndex = currentBlockResult.rows[0]?.current_block_index;
+      const currentBlockIndex = rawBlockIndex ? parseInt(rawBlockIndex.toString()) : 0;
       
       // IMPROVED QUERY: Only blocks where farmer planted AND worked successfully,
       // and enough blocks have passed (harvest interval logic from reference)
       const harvestInterval = 2; // blocks to wait before harvest (same as reference)
+      
+      // Skip harvest check if we don't have a valid current block index
+      if (!currentBlockIndex || currentBlockIndex === 0) {
+        logger.debug(`No recent block operations found, skipping harvest interval check for farmer ${farmerId.substring(0, 8)}...`);
+        // Return empty for now - we need block operations to determine harvest readiness
+        return [];
+      }
       
       const result = await db.query(`
         SELECT DISTINCT
@@ -412,7 +423,25 @@ export class AutomatedHarvestService {
       if (harvestResult.success) {
         // Extract reward from transaction result if available
         const rawReward = harvestResult.details?.reward || 0;
-        const reward = typeof rawReward === 'object' ? String(rawReward) : String(rawReward);
+        let reward = '0';
+
+        logger.info(`Harvest details: ${JSON.stringify(harvestResult.details)}`);
+        
+        // Handle different reward data formats
+        if (typeof rawReward === 'object' && rawReward !== null) {
+          // If it's an object, try to extract the value (might be a BigInt or similar)
+          if ('toString' in rawReward) {
+            reward = rawReward.toString();
+          } else {
+            logger.warn(`Unexpected reward object format: ${JSON.stringify(rawReward)}`);
+            reward = '0';
+          }
+        } else {
+          reward = String(rawReward);
+        }
+        
+        // Ensure reward is a valid numeric string for BigInt conversion
+        reward = reward.replace(/[^0-9]/g, '') || '0';
         
         logger.debug(`✅ Harvest successful ${JSON.stringify({
           farmer_id: candidate.farmerId.substring(0, 8) + '...',
@@ -421,6 +450,35 @@ export class AutomatedHarvestService {
           reward: reward.toString(),
           processing_time_ms: processingTimeMs
         })}`);
+
+        // Record successful harvest in database
+        try {
+          await harvestQueries.recordHarvest(
+            candidate.blockIndex,
+            candidate.farmerId,
+            Config.POOLER.ID,
+            candidate.farmerPublicKey,
+            reward,
+            harvestResult.transactionHash || '',
+            'success'
+          );
+          
+          logger.debug('📝 Harvest recorded in database successfully - DATABASE RECORDED', {
+            farmer_id: candidate.farmerId.substring(0, 8) + '...',
+            block_index: candidate.blockIndex,
+            reward_stroops: reward,
+            reward_kale: (Number(reward) / 10000000).toFixed(7),
+            transaction_hash: harvestResult.transactionHash
+          });
+          
+        } catch (dbError) {
+          logger.error('Failed to record successful harvest in database', dbError as Error, {
+            farmer_id: candidate.farmerId,
+            block_index: candidate.blockIndex,
+            transaction_hash: harvestResult.transactionHash
+          });
+          // Don't fail the harvest operation due to database recording issues
+        }
 
         return {
           farmerId: candidate.farmerId,
@@ -438,6 +496,28 @@ export class AutomatedHarvestService {
           error: harvestResult.error,
           processing_time_ms: processingTimeMs
         })}`);
+
+        // Record failed harvest in database
+        try {
+          await harvestQueries.recordHarvest(
+            candidate.blockIndex,
+            candidate.farmerId,
+            Config.POOLER.ID,
+            candidate.farmerPublicKey,
+            '0',
+            harvestResult.transactionHash || '',
+            'failed',
+            harvestResult.error
+          );
+          
+          logger.debug(`📝 Failed harvest recorded in database for farmer ${candidate.farmerId.substring(0, 8)}... block ${candidate.blockIndex}`);
+          
+        } catch (dbError) {
+          logger.error('Failed to record failed harvest in database', dbError as Error, {
+            farmer_id: candidate.farmerId,
+            block_index: candidate.blockIndex
+          });
+        }
 
         return {
           farmerId: candidate.farmerId,

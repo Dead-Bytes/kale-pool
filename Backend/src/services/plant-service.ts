@@ -331,8 +331,8 @@ export class PlantService {
     const plantStartTime = Date.now();
 
     try {
-      // Calculate stake amount based on farmer's balance and percentage
-      const stakeAmount = this.calculateStakeAmount(farmer);
+      // Calculate stake amount based on farmer's real-time wallet balance and percentage
+      const stakeAmount = await this.calculateStakeAmount(farmer);
 
       logger.debug('Executing plant for farmer', {
         farmer_id: farmer.id,
@@ -359,10 +359,12 @@ export class PlantService {
           'success'
         );
 
-        logger.debug('Plant operation successful', {
+        logger.debug('Plant operation successful - DATABASE RECORDED', {
           farmer_id: farmer.id,
           transaction_hash: plantResult.transactionHash,
-          stake_amount: stakeAmount,
+          stake_amount_stroops: stakeAmount,
+          stake_amount_kale: (Number(stakeAmount) / 10000000).toFixed(7),
+          block_index: blockIndex,
           duration_ms: Date.now() - plantStartTime
         });
 
@@ -443,10 +445,45 @@ export class PlantService {
   // STAKE CALCULATION
   // ======================
 
-  private calculateStakeAmount(farmer: any): string {
+  private async calculateStakeAmount(farmer: any): Promise<string> {
     try {
-      // Get current KALE balance
-      const currentBalance = BigInt(farmer.current_balance || '0');
+      // Get real-time KALE balance from Stellar wallet instead of database
+      let currentBalanceKale = 0;
+      let currentBalance = BigInt(0);
+      
+      try {
+        // Import the wallet balance service
+        const { getWalletBalance } = await import('../services/stellar-wallet-service');
+        const balanceResult = await getWalletBalance(farmer.custodial_public_key);
+        
+        if ('error' in balanceResult) {
+          logger.warn('Failed to fetch wallet balance for stake calculation, using database balance', {
+            farmer_id: farmer.id,
+            custodial_wallet: farmer.custodial_public_key,
+            error: balanceResult.error
+          });
+          currentBalance = BigInt(farmer.current_balance || '0');
+          currentBalanceKale = Number(farmer.current_balance || '0') / 10000000;
+        } else {
+          // Use real-time balance from Stellar wallet
+          currentBalanceKale = parseFloat(balanceResult.kale);
+          currentBalance = BigInt(Math.floor(currentBalanceKale * 10000000)); // Convert KALE to stroops
+          
+          logger.info('Fetched real-time wallet balance for stake calculation', {
+            farmer_id: farmer.id,
+            custodial_wallet: farmer.custodial_public_key,
+            wallet_balance_kale: currentBalanceKale,
+            wallet_balance_stroops: currentBalance.toString()
+          });
+        }
+      } catch (balanceError) {
+        logger.error('Error fetching wallet balance for stake calculation', balanceError as Error, {
+          farmer_id: farmer.id
+        });
+        // Fallback to database balance
+        currentBalance = BigInt(farmer.current_balance || '0');
+        currentBalanceKale = Number(farmer.current_balance || '0') / 10000000;
+      }
       
       // Calculate stake based on percentage
       // Phase 2 (contract farmers) have stake_percentage from pool contracts
@@ -461,10 +498,14 @@ export class PlantService {
       logger.debug('Stake calculation completed', {
         farmer_id: farmer.id,
         farmer_type: farmer.harvest_interval ? 'contract' : 'legacy',
-        current_balance: currentBalance.toString(),
+        wallet_balance_real_time_kale: currentBalanceKale.toFixed(7),
+        wallet_balance_stroops: currentBalance.toString(),
+        database_balance_stroops: farmer.current_balance || '0',
         stake_percentage: stakePercentage,
-        calculated_stake: finalStake.toString(),
-        contract_harvest_interval: farmer.harvest_interval || 'N/A'
+        calculated_stake_stroops: finalStake.toString(),
+        calculated_stake_kale: (Number(finalStake) / 10000000).toFixed(7),
+        contract_harvest_interval: farmer.harvest_interval || 'N/A',
+        source: 'real_time_stellar_wallet'
       });
 
       return finalStake.toString();
