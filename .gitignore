@@ -9,4 +9,4 @@ node_modules/*
 logs/*
 **/*.log
 .lock
-*/.lock
+*.lock
