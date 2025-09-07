@@ -23,7 +23,7 @@ cd kale-pool-mining
 
 # Install dependencies
 cd Backend && bun install
-cd ../Shared && bun install
+cd @shared && bun install
 # cd ../Pooler && bun install  # After Phase 2 implementation
 ```
 
@@ -374,14 +374,14 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json bun.lockb ./
-COPY ../Shared/package.json ../Shared/
+COPY @shared/package.json @shared/
 
 # Install dependencies
 RUN bun install --production
 
 # Copy source code
 COPY . .
-COPY ../Shared ../Shared
+COPY @shared @shared
 
 # Build application
 RUN bun run build

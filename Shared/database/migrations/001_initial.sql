@@ -2,7 +2,7 @@
 -- Created: 2025-01-25
 -- Description: Creates complete database schema for Phase 1 implementation
 
-\i '../../Shared/database/schema.sql'
+\i '@shared/database/schema.sql'
 
 -- Insert sample pooler for development/testing  
 -- Using a fixed UUID that matches our Pooler service configuration

@@ -192,7 +192,7 @@ function loadConfig(): KalePoolConfig {
       // Database configuration
       DATABASE: {
         URL: validateEnvironmentVariable('DATABASE_URL', process.env.DATABASE_URL, false) || 'postgresql://kale_user:kale_pass@localhost:5432/kale_pool_mainnet',
-        SSL: validateBooleanEnvironmentVariable('DATABASE_SSL', process.env.NODE_ENV, false, false),
+        SSL: validateBooleanEnvironmentVariable('DATABASE_SSL', process.env.DATABASE_SSL, false, false),
         POOL_SIZE: validateNumericEnvironmentVariable('DATABASE_POOL_SIZE', process.env.DATABASE_POOL_SIZE, false, 20),
         TIMEOUT_MS: validateNumericEnvironmentVariable('DATABASE_TIMEOUT_MS', process.env.DATABASE_TIMEOUT_MS, false, 30000),
       },

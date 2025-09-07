@@ -113,7 +113,7 @@ The configuration system requires:
 ## Usage
 
 ```typescript
-import Config from '../../Shared/config';
+import Config from '@shared/config';
 
 // Instead of: process.env.PORT || '3000'
 const port = Config.BACKEND.PORT;
