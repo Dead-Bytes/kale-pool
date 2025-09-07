@@ -47,8 +47,10 @@ export const createServer = (): express.Application => {
 
   // Middleware
   app.use(cors({
-    origin: Config.BACKEND.CORS_ORIGIN,
-    credentials: true
+    origin: Config.BACKEND.CORS_ORIGIN.includes('*') ? '*' : Config.BACKEND.CORS_ORIGIN,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning']
   }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -1512,7 +1514,7 @@ async function notifyPoolerPlantingStatus(poolerId: string, plantingData: any): 
 }
 
 // Start server if this file is run directly
-if (require.main === module) {
+if (import.meta.main) {
   startServer().catch(error => {
     logger.error('Server startup failed', error);
     process.exit(1);

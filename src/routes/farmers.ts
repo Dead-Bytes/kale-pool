@@ -61,6 +61,142 @@ router.get('/current',
   }
 );
 
+// POST /farmers/check-funding - Check and update farmer funding status
+router.post('/check-funding',
+  authenticate,
+  apiRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: userId } = req.user!;
+      
+      // Verify farmer association
+      const farmerAssociation = await farmerService.validateFarmerAssociation(userId);
+      if (!farmerAssociation) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND',
+            message: 'No farmer account associated with this user'
+          }
+        });
+      }
+      
+      // Get farmer data
+      const farmer = await farmerService.getFarmerById(farmerAssociation.farmerId);
+      if (!farmer) {
+        return res.status(404).json({
+          error: {
+            code: 'FARMER_NOT_FOUND', 
+            message: 'Farmer data not found'
+          }
+        });
+      }
+
+      // Access farmer data from nested structure
+      const farmerData = farmer.farmer;
+      
+      // Check wallet balance to determine funding status
+      logger.info('Checking funding status for farmer', {
+        farmer_id: farmerData.id,
+        custodial_wallet: farmerData.custodial_public_key,
+        current_funding_status: farmerData.is_funded
+      });
+
+      // Check if farmer has a custodial public key
+      if (!farmerData.custodial_public_key) {
+        logger.warn('Farmer does not have custodial wallet setup', {
+          farmer_id: farmerData.id
+        });
+        
+        return res.json({
+          isFunded: false,
+          balance: {
+            xlm: '0',
+            kale: '0'
+          },
+          message: 'Custodial wallet not setup yet',
+          requiresWalletSetup: true
+        });
+      }
+
+      try {
+        const balanceResult = await getWalletBalance(farmerData.custodial_public_key);
+        
+        if ('error' in balanceResult) {
+          // Wallet balance check failed - account likely not funded
+          if (farmerData.is_funded) {
+            // Update funding status to false if it was previously true
+            await db.farmerQueries.updateFarmerFunding(farmerData.id, false);
+            logger.info('Updated farmer funding status to false', {
+              farmer_id: farmerData.id,
+              reason: 'wallet_balance_check_failed'
+            });
+          }
+          
+          return res.json({
+            isFunded: false,
+            balance: {
+              xlm: '0',
+              kale: '0'
+            },
+            message: 'Wallet not funded or balance check failed',
+            error: balanceResult.error
+          });
+        } else {
+          // Balance check succeeded - determine if funded
+          const xlmBalance = parseFloat(balanceResult.xlm);
+          const kaleBalance = parseFloat(balanceResult.kale);
+          const isFunded = xlmBalance > 0 || kaleBalance > 0;
+          
+          // Update funding status in database
+          await db.farmerQueries.updateFarmerFunding(farmerData.id, isFunded, balanceResult.kale);
+          
+          logger.info('Updated farmer funding status', {
+            farmer_id: farmerData.id,
+            is_funded: isFunded,
+            xlm_balance: xlmBalance,
+            kale_balance: kaleBalance
+          });
+          
+          return res.json({
+            isFunded: isFunded,
+            balance: {
+              xlm: balanceResult.xlm,
+              kale: balanceResult.kale
+            },
+            message: isFunded ? 'Wallet is funded' : 'Wallet needs funding',
+            accountExists: balanceResult.accountExists
+          });
+        }
+      } catch (error) {
+        logger.error('Error checking wallet balance', {
+          farmer_id: farmerData.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        return res.status(500).json({
+          error: {
+            code: 'BALANCE_CHECK_FAILED',
+            message: 'Failed to check wallet balance'
+          }
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error in funding check:', {
+        error: errorMessage,
+        userId: req.user?.id
+      });
+      
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to check funding status: ' + errorMessage
+        }
+      });
+    }
+  }
+);
+
 // GET /farmers/blockchain-data - Get current user's blockchain dashboard data
 router.get('/blockchain-data',
   authenticate,
@@ -108,24 +244,26 @@ router.get('/blockchain-data',
       const farmer = farmerResult.rows[0];
 
       // Get real custodial wallet balances from Stellar blockchain using SDK
+      // Only fetch balance if farmer is funded to prevent blockchain-data failures
       let custodialWalletBalances = {
         xlm: '0',
         kale: '0',
         accountExists: false
       };
 
-      if (farmer.custodial_public_key) {
+      if (farmer.custodial_public_key && farmer.is_funded) {
         try {
-          logger.info(`Fetching Stellar SDK balance for farmer ${farmerId}`, {
-            custodialAddress: farmer.custodial_public_key
+          logger.info(`Fetching Stellar SDK balance for funded farmer ${farmerId}`, {
+            custodialAddress: farmer.custodial_public_key,
+            isFunded: farmer.is_funded
           });
 
           // Use Stellar wallet service to get wallet balance
           const balanceResult = await getWalletBalance(farmer.custodial_public_key);
           
           if ('error' in balanceResult) {
-            // Handle error case (account not found)
-            logger.warn(`Stellar balance fetch failed for farmer ${farmerId}:`, {
+            // Handle error case (account not found) - this shouldn't happen for funded farmers
+            logger.warn(`Stellar balance fetch failed for funded farmer ${farmerId}:`, {
               error: balanceResult.error,
               accountExists: balanceResult.accountExists
             });
@@ -138,7 +276,7 @@ router.get('/blockchain-data',
             custodialWalletBalances.kale = balanceResult.kale;
             custodialWalletBalances.accountExists = balanceResult.accountExists;
             
-            logger.info(`Successfully fetched Stellar balances for farmer ${farmerId}`, {
+            logger.info(`Successfully fetched Stellar balances for funded farmer ${farmerId}`, {
               custodialAddress: farmer.custodial_public_key,
               xlmBalance: balanceResult.xlm,
               kaleBalance: balanceResult.kale,
@@ -146,16 +284,21 @@ router.get('/blockchain-data',
             });
           }
         } catch (error) {
-          logger.error(`Stellar SDK balance fetch exception for farmer ${farmerId}:`, error as Error);
-          // Fall back to mock data if SDK fails
-          custodialWalletBalances.xlm = (Math.floor(Math.random() * 1000) / 100).toString();
-          custodialWalletBalances.kale = (Math.floor(Math.random() * 10000) / 100).toString();
+          logger.error(`Stellar SDK balance fetch exception for funded farmer ${farmerId}:`, error as Error);
+          // Keep zero balances for consistency
+          custodialWalletBalances.xlm = '0';
+          custodialWalletBalances.kale = '0';
         }
+      } else if (!farmer.is_funded) {
+        logger.info(`Skipping balance fetch for unfunded farmer ${farmerId}`, {
+          custodialAddress: farmer.custodial_public_key,
+          isFunded: farmer.is_funded,
+          message: 'Use /farmers/check-funding to verify and update funding status'
+        });
+        // Keep zero balances for unfunded farmers
       } else {
         logger.warn(`No custodial public key found for farmer ${farmerId}`);
-        // Use mock data if no custodial key exists
-        custodialWalletBalances.xlm = (Math.floor(Math.random() * 1000) / 100).toString();
-        custodialWalletBalances.kale = (Math.floor(Math.random() * 10000) / 100).toString();
+        // Keep zero balances if no custodial key exists
       }
 
       // Get the most recent block data from block_operations table
